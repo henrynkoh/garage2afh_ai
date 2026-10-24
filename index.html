@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>garage2AFH — garage to AFH package generator</title>
+<style>
+  :root{--ink:#101828;--muted:#667085;--line:#e4e7ec;--bg:#f8fafc;--accent:#0b5fff}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);line-height:1.55}
+  header{padding:56px 22px 40px;background:#fff;border-bottom:1px solid var(--line)}
+  .wrap{max-width:980px;margin:0 auto}
+  h1{font-size:34px;margin:0 0 10px;letter-spacing:-.02em}
+  .lead{font-size:17px;color:var(--muted);max-width:720px;margin:0}
+  .badges{margin-top:18px;display:flex;gap:8px;flex-wrap:wrap}
+  .badge{font-size:12px;border:1px solid var(--line);border-radius:999px;padding:4px 10px;color:var(--muted);background:#fff}
+  main{padding:34px 22px 70px}
+  h2{font-size:20px;margin:36px 0 12px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+  a.card{display:block;text-decoration:none;color:inherit;background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px;transition:.15s}
+  a.card:hover{border-color:var(--accent);box-shadow:0 6px 18px rgba(11,95,255,.08);transform:translateY(-1px)}
+  .card h3{margin:0 0 6px;font-size:15px}
+  .card p{margin:0;font-size:13px;color:var(--muted)}
+  .card .tag{display:inline-block;font-size:11px;color:var(--accent);margin-bottom:8px;letter-spacing:.04em;text-transform:uppercase}
+  pre{background:#0f172a;color:#e2e8f0;padding:16px 18px;border-radius:10px;overflow:auto;font-size:13px}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;background:#fff}
+  th,td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left}
+  th{background:#f1f5f9;font-weight:600}
+  footer{border-top:1px solid var(--line);padding:24px 22px;color:var(--muted);font-size:12.5px;background:#fff}
+  .cta{display:inline-block;margin-top:20px;background:var(--accent);color:#fff;text-decoration:none;padding:11px 18px;border-radius:9px;font-weight:600;font-size:14px}
+  .note{font-size:12.5px;color:var(--muted);margin-top:10px}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>garage2AFH</h1>
+    <p class="lead">One property in. A complete garage-to-AFH conversion package out: 43 drawing sheets, 74 automated checks, materials takeoff, appendix A–D, one bound PDF ready for the city portal.</p>
+    <div class="badges">
+      <span class="badge">REA + Six Sigma (DMAIC)</span>
+      <span class="badge">43 sheets / 71 pages</span>
+      <span class="badge">74 automated checks</span>
+      <span class="badge">MIT licence</span>
+    </div>
+    <a class="cta" href="https://github.com/henrynkoh/garage2afh_ai">Open the repository</a>
+  </div>
+</header>
+
+<main class="wrap">
+
+<h2>Start here</h2>
+<div class="grid">
+  <a class="card" href="README.md"><span class="tag">Quickstart</span><h3>README</h3><p>What it does, the 9-stage SOP, and the five-minute install.</p></a>
+  <a class="card" href="MANUAL.md"><span class="tag">Manual</span><h3>Operator manual</h3><p>Every command, every file, every gate — including what the validator refuses to pass.</p></a>
+  <a class="card" href="TUTORIAL.md"><span class="tag">Tutorial</span><h3>First project walkthrough</h3><p>Build the 3571 Cassie case from scratch, stage by stage, with expected outputs.</p></a>
+  <a class="card" href="SOP.md"><span class="tag">Routine</span><h3>Business SOP</h3><p>The repeatable pattern for running many addresses: intake, gates, review, handoff.</p></a>
+</div>
+
+<h2>Method</h2>
+<div class="grid">
+  <a class="card" href="docs/rea-six-sigma.md"><span class="tag">Analysis</span><h3>REA + DMAIC write-up</h3><p>How the delivered package was reverse-engineered, the six defect classes, and the four control mechanisms.</p></a>
+  <a class="card" href="docs/rea-six-sigma.md#3-dpmo-model-used-by-the-app"><span class="tag">Metrics</span><h3>DPMO model</h3><p>From ~80k DPMO to zero hard-gate defects, measured per document unit.</p></a>
+  <a class="card" href="docs/manual-ko.md"><span class="tag">한국어</span><h3>Korean quickstart</h3><p>주소 입력부터 PDF 바인딩까지 한국어 요약.</p></a>
+</div>
+
+<h2>Marketing kit</h2>
+<div class="grid">
+  <a class="card" href="docs/marketing-ads.md"><span class="tag">Ads</span><h3>8 channels + email</h3><p>Facebook, Instagram, Threads, Blogger, Naver Blog, Tistory, WordPress, newsletter with a 3-touch sequence.</p></a>
+  <a class="card" href="docs/marketing-ads.md#2-instagram-carousel-6-slides"><span class="tag">Carousel</span><h3>Instagram slides</h3><p>Six slides and a caption that reads as a case study, not an ad.</p></a>
+</div>
+
+<h2>What a run produces</h2>
+<table>
+<tr><th>Artifact</th><th>Detail</th></tr>
+<tr><td>Drawing set</td><td>43 sheets, A3 landscape: G / C / A-01–A-18 / S / M / E / P / LS / EN</td></tr>
+<tr><td>Audit</td><td>74 checks across 12 categories; every failure printed with its detail</td></tr>
+<tr><td>Takeoff</td><td>line-item materials with quantities, CSV + markdown, totals computed not asserted</td></tr>
+<tr><td>Appendix</td><td>A inputs &amp; evidence · B construction specs · C materials &amp; budget · D site QA</td></tr>
+<tr><td>Bound package</td><td>single PDF, one page size, zero blank pages, indexed</td></tr>
+<tr><td>Portal files</td><td>address-named split PDFs (Plans / Application Data / Calculations)</td></tr>
+</table>
+
+<h2>Install</h2>
+<pre>git clone https://github.com/henrynkoh/garage2afh_ai.git
+cd garage2afh_ai
+python3 -m pip install ezdxf pypdf openpyxl
+python3 g2a.py new "123 Jane Doe St, Tumwater WA 98512" --parcel 40380000700 --lot-sf 9411
+python3 g2a.py build 123-jane-doe-st
+python3 g2a.py bind   123-jane-doe-st
+python3 g2a.py check  123-jane-doe-st</pre>
+<p class="note">Blender is optional and only used for IFC export. Generated drawings are drafts; code compliance and signatures stay with the licensed human.</p>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    garage2AFH · MIT · GitHub Pages ready · <a href="https://github.com/henrynkoh/garage2afh_ai">henrynkoh/garage2afh_ai</a>
+  </div>
+</footer>
+</body>
+</html>
