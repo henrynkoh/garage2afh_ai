@@ -1,9 +1,16 @@
 """
-3571 Cassie - 자동검사 74개 + 자재 물량 + 웹 리포트.
+자동검사 74개 + 자재 물량 + 웹 리포트 (프로그램 인식형).
 
 ifcopenshell 없이 design.py 데이터로 계산한다(Blender 없이도 실행 가능).
   python3 audit_3571.py            → out/checks_3571.json, out/자재목록.csv/.md
   (SVG가 있으면 out/report_full.html 도 생성)
+
+검사 기대값은 3571 기준(3침실 / 736 SF / 벽 12개)이 아니라 **각 프로젝트 design.py**
+에서 도출한다: 침실 수 = ROOMS 의 kind=='bedroom' 개수, 이그레스 창 = 침실 수,
+문 = len(DOORS), 벽 = len(WALLS), 기계실 = ROOMS 의 kind=='mech' 유무(없으면 n/a),
+천장고 = META['ceiling'] 설계 기준값(실측 없으면 WARN 통과).
+따라서 3571 보다 작은 정당한 프로그램이 '작다'는 이유만으로 FAIL 되지 않는다.
+반대로 실제 결함(문 폭 부족, 벽 누락, 실 미구획, 이그레스 창 누락 등)은 그대로 FAIL 된다.
 """
 
 import csv
@@ -11,6 +18,7 @@ import glob
 import json
 import math
 import os
+import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -43,9 +51,13 @@ def wlen(w):
     return math.hypot(x2 - x1, y2 - y1)
 
 
-def add(cid, cat, title, ok, detail=""):
-    RESULTS.append({"id": cid, "cat": cat, "title": title,
-                    "result": "PASS" if ok else "FAIL", "detail": detail})
+def add(cid, cat, title, ok, detail="", warn=False):
+    """warn=True: 통과이지만 확인이 필요한 항목(설계 기준값 / 현장 실측 필요)."""
+    row = {"id": cid, "cat": cat, "title": title,
+           "result": "PASS" if ok else "FAIL", "detail": detail}
+    if warn and ok:
+        row["warn"] = True
+    RESULTS.append(row)
 
 
 def ft_in(m):
@@ -59,6 +71,74 @@ def pt_on(w, off):
     (x1, y1), (x2, y2) = w["p1"], w["p2"]
     L = wlen(w)
     return x1 + (x2 - x1) / L * off, y1 + (y2 - y1) / L * off
+
+
+# ------------------------------------------------- 설계 기준값 도출 (3571 고정값 제거)
+WALL_TOL = 0.15  # m - 실 경계선과 벽 중심선 허용 오차
+
+
+def seg_overlap(a1, a2, b1, b2):
+    return max(0.0, min(max(a1, a2), max(b1, b2)) - max(min(a1, a2), min(b1, b2)))
+
+
+def bounding_walls(rect, tol=WALL_TOL):
+    """실 사각형의 4변을 각각 지지하는 벽 (변 → [벽 이름])."""
+    x1, y1, x2, y2 = rect
+    hits = {"S": [], "N": [], "W": [], "E": []}
+    for w in WALLS:
+        (ax, ay), (bx, by) = w["p1"], w["p2"]
+        if abs(ay - by) < 1e-6:  # 수평벽
+            for side, ey in (("S", y1), ("N", y2)):
+                if abs(ay - ey) <= tol and seg_overlap(ax, bx, x1, x2) > 0.1:
+                    hits[side].append(w["name"])
+        elif abs(ax - bx) < 1e-6:  # 수직벽
+            for side, ex in (("W", x1), ("E", x2)):
+                if abs(ax - ex) <= tol and seg_overlap(ay, by, y1, y2) > 0.1:
+                    hits[side].append(w["name"])
+    return hits
+
+
+def enclosed_sides(rect, tol=WALL_TOL):
+    """실이 벽으로 막힌 변의 수 (0~4)."""
+    return sum(1 for v in bounding_walls(rect, tol).values() if v)
+
+
+def declared_beds():
+    """META 문안에 선언된 침실 수(설계 기준). 선언이 없으면 None."""
+    meta = getattr(design, "META", {})
+    txt = " ".join(str(meta.get(k, "")) for k in
+                   ("scope_kr", "scope", "proposed_use", "scope_short"))
+    m = re.search(r"침실\s*(\d+)", txt) or re.search(r"(\d+)\s*-?\s*bedroom", txt, re.I)
+    return int(m.group(1)) if m else None
+
+
+def measured_ceiling():
+    """현장 실측 천장고(META). 없으면 None → 설계 기준값으로 WARN 통과."""
+    meta = getattr(design, "META", {})
+    for k in ("existing_ceiling_measured", "ceiling_measured", "measured_ceiling"):
+        v = meta.get(k)
+        if isinstance(v, (int, float)) and v > 0:
+            return float(v)
+    return None
+
+
+def ceiling_check():
+    """천장고: 고정 문자열(10'-5") 대신 설계 기준값/META 실측값과 비교.
+    실측값이 없으면 FAIL 이 아니라 WARN 통과('설계 기준값 (현장 실측 필요)').
+    """
+    meta = getattr(design, "META", {})
+    wall_h = H["wall_height"]
+    meas = measured_ceiling()
+    basis = meta.get("ceiling")
+    if meas is not None:
+        ok = abs(wall_h - meas) <= 0.05
+        return ok, f"설계 {ft_in(wall_h)} · 실측 {ft_in(meas)}", False
+    if isinstance(basis, (int, float)) and basis > 0:
+        ok = abs(wall_h - basis) <= 0.01
+        detail = (f"{ft_in(wall_h)} · 설계 기준값 (현장 실측 필요)"
+                  + ("" if abs(wall_h - basis) <= 0.01 else f" · META 기준 {ft_in(basis)} 불일치"))
+        return ok, detail, True
+    return wall_h > 0, f"{ft_in(wall_h)} · META 기준값 없음", False
 
 
 # ---------------------------------------------------------------- 검사 74
@@ -90,34 +170,61 @@ def run_checks():
     # 2) 평면 치수 (C11-C20)
     add("C11", "치수", "평면 판 크기 산정", plate > 0, f"{plate:.1f} m²")
     add("C12", "치수", "실 면적 합계 > 0", total_room > 0, f"{total_room:.1f} m²")
-    target = getattr(design, "META", {}).get("internal_sf", 736)
+    target = getattr(design, "META", {}).get("internal_sf") or round(plate / SF * 0.95)
     add("C13", "치수", f"내부면적 {target} SF 근사", abs(total_room / SF - target) / target < 0.15,
         f"{total_room / SF:.0f} SF (기준 {target})")
     add("C14", "치수", "모든 거주실 최소 4 m²",
         all(area(r["rect"]) >= 4 for r in ROOMS if r["kind"] not in ("mech", "storage", "hall")),
         ", ".join(r["name"] for r in ROOMS
                   if r["kind"] not in ("mech", "storage", "hall") and area(r["rect"]) < 4) or "ok")
-    add("C15", "치수", "침실 3개", len(beds) == 3, f"{len(beds)}개")
+    _decl_beds = declared_beds()
+    add("C15", "치수", f"침실 {len(beds)}개 (설계 기준)",
+        (len(beds) == _decl_beds) if _decl_beds else len(beds) > 0,
+        f"ROOMS 침실 {len(beds)}개 · META 선언 {_decl_beds if _decl_beds else '미선언'}")
     add("C16", "치수", "통합욕실 1개 이상 (A01.4)", len(baths) >= 1, f"{len(baths)}개")
     add("C17", "치수", "침실 최소 70 SF", all(area(r["rect"]) / SF >= 70 for r in beds),
-        ", ".join(f"{r['name']}={area(r['rect'])/SF:.0f}SF" for r in beds))
+        ", ".join(f"{r['name']}={area(r['rect'])/SF:.0f}SF" for r in beds) or "침실 없음")
     add("C18", "치수", "욕실 최소 35 SF", all(area(r["rect"]) / SF >= 35 for r in baths),
-        ", ".join(f"{r['name']}={area(r['rect'])/SF:.0f}SF" for r in baths))
+        ", ".join(f"{r['name']}={area(r['rect'])/SF:.0f}SF" for r in baths) or "욕실 없음")
     add("C19", "치수", "복도 폭 36in 이상", True, "복도 2.83 ft ≈ 34in (확인 필요)")
-    add("C20", "치수", "천장고 표기", "10'-5" in ft_in(H["wall_height"]),
-        ft_in(H["wall_height"]) + " · " + str(getattr(design, "META", {}).get("existing_ceiling", "")))
+    add("C20", "치수", "천장고 표기", *ceiling_check())
 
     # 3) 벽/구획 (C21-C30)
-    add("C21", "벽", "외벽 두께 6in", all(abs(w["t"] - 0.1524) < 0.02 for w in WALLS if w["exterior"]),
-        ft_in(WALLS[0]["t"]))
-    add("C22", "벽", "내벽 두께 4in", all(abs(w["t"] - 0.1016) < 0.02 for w in WALLS if not w["exterior"]),
-        ft_in(WALLS[4]["t"]))
+    _ext = [w for w in WALLS if w["exterior"]]
+    _int = [w for w in WALLS if not w["exterior"]]
+    add("C21", "벽", "외벽 두께 6in", all(abs(w["t"] - 0.1524) < 0.02 for w in _ext),
+        ft_in(_ext[0]["t"]) if _ext else "외벽 없음")
+    add("C22", "벽", "내벽 두께 4in", all(abs(w["t"] - 0.1016) < 0.02 for w in _int),
+        ft_in(_int[0]["t"]) if _int else "내벽 없음")
     dup = len({(w["p1"], w["p2"]) for w in WALLS}) == len(WALLS)
     add("C23", "벽", "중복 벽 없음", dup)
-    add("C24", "벽", "벽 수 12개 이상", len(WALLS) >= 12, f"{len(WALLS)}개")
-    add("C25", "벽", "모든 실이 벽으로 둘러싸임", True, "스키매틱 기준")
-    add("C26", "벽", "욕실 인접 파티션 존재", True, "W05")
-    add("C27", "벽", "HVAC실 별도 구획", any(r["kind"] == "mech" for r in ROOMS), "HVAC")
+    _open = [(r["name"], enclosed_sides(r["rect"])) for r in ROOMS if enclosed_sides(r["rect"]) < 4]
+    add("C24", "벽", f"벽 {len(WALLS)}개 (설계 기준) · 모든 실 4면 구획", not _open,
+        f"벽 {len(WALLS)}개 · 미구획 실: "
+        + (", ".join(f"{n}({k}면)" for n, k in _open) if _open else "없음"))
+    _ovl = []
+    for i, a in enumerate(ROOMS):
+        ax1, ay1, ax2, ay2 = a["rect"]
+        for b in ROOMS[i + 1:]:
+            bx1, by1, bx2, by2 = b["rect"]
+            if (min(ax2, bx2) - max(ax1, bx1) > 0.05) and (min(ay2, by2) - max(ay1, by1) > 0.05):
+                _ovl.append(f"{a['name']}×{b['name']}")
+    add("C25", "벽", "실 면적 중복 없음", not _ovl,
+        ", ".join(_ovl) if _ovl else f"{len(ROOMS)}개 실 상호 중복 없음")
+    _bw = bounding_walls(baths[0]["rect"]) if baths else None
+    add("C26", "벽", "욕실 인접 파티션 존재",
+        bool(_bw) and bool(_bw["E"] or _bw["W"] or _bw["N"] or _bw["S"]),
+        (f"{baths[0]['name']} 인접벽 " + ", ".join((_bw["E"] + _bw["W"] + _bw["N"] + _bw["S"])[:3]))
+        if baths else "욕실 없음")
+    _mech = [r for r in ROOMS if r["kind"] == "mech"]
+    if not _mech:
+        add("C27", "벽", "HVAC실 별도 구획", True, "n/a (설계에 별도 기계실 없음)")
+    else:
+        _bad = [(r["name"], enclosed_sides(r["rect"]), area(r["rect"])) for r in _mech
+                if enclosed_sides(r["rect"]) < 3 or area(r["rect"]) < 1.0]
+        add("C27", "벽", f"HVAC실 별도 구획 {len(_mech)}개", not _bad,
+            ", ".join(f"{r['name']}: {enclosed_sides(r['rect'])}면/{area(r['rect']):.1f}㎡"
+                      for r in _mech) + ("" if not _bad else " · 구획 부족"))
     add("C28", "벽", "개구부 폐쇄면 표기", True, "A-18")
     add("C29", "벽", "신규 개구부 헤더 표기", True, "S-01 H2")
     add("C30", "벽", "방수 구획(욕실) 표기", True, "A-16")
@@ -125,20 +232,28 @@ def run_checks():
     # 4) 문/창 (C31-C40)
     doors = design.DOORS
     wins = design.WINDOWS
-    add("C31", "문", "문 6개 이상", len(doors) >= 6, f"{len(doors)}개")
+    _wnames = {w["name"] for w in WALLS}
+    _nohost = [d["name"] for d in doors if d.get("wall") not in _wnames]
+    add("C31", "문", f"문 {len(doors)}개 (설계 기준)", bool(doors) and not _nohost,
+        f"문 {len(doors)}개 · 벽 미지정: " + (", ".join(_nohost) if _nohost else "없음"))
     add("C32", "문", "모든 문 폭 32in 이상", all(d["w"] >= 0.81 for d in doors),
-        ", ".join(d["name"] for d in doors if d["w"] < 0.81) or "ok")
-    add("C33", "문", "문 높이 6'-8\"", all(abs(d["h"] - 2.03) < 0.05 for d in doors), ft_in(doors[0]["h"]))
+        ", ".join(f"{d['name']}={d['w']/FT*12:.0f}in" for d in doors if d["w"] < 0.81) or "ok")
+    add("C33", "문", "문 높이 6'-8\"", all(abs(d["h"] - 2.03) < 0.05 for d in doors),
+        ft_in(doors[0]["h"]) if doors else "문 없음")
     add("C34", "문", "욕실 문 존재", any("욕실" in d["name"] for d in doors))
-    add("C35", "문", "침실별 출입문", len([d for d in doors if "침실" in d["name"]]) >= 3,
-        str(len([d for d in doors if "침실" in d["name"]])))
-    add("C36", "창", "창 4개 이상", len(wins) >= 4, f"{len(wins)}개")
-    add("C37", "창", "이그레스 창 3개", len([w for w in wins if "이그레스" in w["name"]]) == 3,
-        str(len([w for w in wins if "이그레스" in w["name"]])))
+    _bed_doors = [d for d in doors if "침실" in d["name"]]
+    add("C35", "문", f"침실별 출입문 {len(beds)}개", len(_bed_doors) >= len(beds),
+        f"{len(_bed_doors)}개 / 침실 {len(beds)}개")
+    _win_need = len(beds) + 1
+    add("C36", "창", f"창 {_win_need}개 이상 (침실 수 + 1)", len(wins) >= _win_need,
+        f"{len(wins)}개 / 기준 {_win_need}")
+    _egress = [w for w in wins if "이그레스" in w["name"]]
+    add("C37", "창", f"이그레스 창 {len(beds)}개 (침실 수)", len(_egress) == len(beds),
+        f"{len(_egress)}개 / 침실 {len(beds)}개")
     win_area = sum(w["w"] * w["h"] for w in wins)
     add("C38", "창", "창면적비 8% 이상", win_area / total_room >= 0.08, f"{win_area/total_room*100:.1f}%")
-    add("C39", "창", "창턱 44in 이하 (이그레스)", all(w["sill"] <= 1.12 for w in wins if "이그레스" in w["name"]),
-        ft_in(max(w["sill"] for w in wins)))
+    add("C39", "창", "창턱 44in 이하 (이그레스)", all(w["sill"] <= 1.12 for w in _egress),
+        ft_in(max((w["sill"] for w in _egress), default=0.0)))
     add("C40", "창", "창호 U-0.30 표기", True, "EN-02")
 
     # 5) 소방/이그레스 (C41-C50)
@@ -265,7 +380,8 @@ def write_report(checks, rows):
     ]
     card_html = "".join(f"<div class='card'><b>{v}</b><span>{k}</span></div>" for k, v in cards)
     check_rows = "".join(
-        f"<tr class='{r['result'].lower()}'><td>{r['id']}</td><td>{r['cat']}</td>"
+        f"<tr class='{r['result'].lower()}{' w' if r.get('warn') else ''}'>"
+        f"<td>{r['id']}</td><td>{r['cat']}</td>"
         f"<td>{r['title']}</td><td>{r['detail']}</td></tr>" for r in checks["results"])
     mat_rows = "".join(
         f"<tr><td>{r['item']}</td><td>{r['spec']}</td><td class='num'>{r['qty']}</td>"
@@ -286,7 +402,7 @@ def write_report(checks, rows):
  table {{ border-collapse:collapse; width:100%; background:#fff; font-size:12px; }}
  th,td {{ border-bottom:1px solid #eef0f3; padding:6px 8px; text-align:left; }}
  th {{ background:#f9fafb; font-weight:600; }}
- tr.fail td {{ background:#fff1f0; }} td.num {{ text-align:right; }}
+ tr.fail td {{ background:#fff1f0; }} tr.pass.w td {{ background:#fffbeb; }} td.num {{ text-align:right; }}
  section {{ background:#fff; border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px; margin-bottom:16px; }}
  section h3 {{ font-size:12px; margin:0 0 8px; color:#374151; }}
  section img {{ width:100%; border:1px solid #eef0f3; }}
@@ -323,6 +439,9 @@ def main():
     csv_path, md_path = write_materials(rows)
     report = write_report(payload, rows)
     print(f"checks {passed}/{len(RESULTS)}")
+    warn = [r for r in RESULTS if r.get("warn")]
+    for r in warn:
+        print("  WARN", r["id"], r["title"], "::", r["detail"])
     print("materials", len(rows), "->", os.path.basename(csv_path), os.path.basename(md_path))
     print("report ->", os.path.basename(report))
     fails = [r for r in RESULTS if r["result"] != "PASS"]
