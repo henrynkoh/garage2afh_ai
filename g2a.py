@@ -13,7 +13,8 @@ import argparse, glob, json, os, re, subprocess, sys
 REPO = os.path.dirname(os.path.abspath(__file__))
 PIPE, TOOLS = os.path.join(REPO, "src", "pipeline"), os.path.join(REPO, "src", "tools")
 TPL, PROJECTS = os.path.join(REPO, "templates", "design.py"), os.path.join(REPO, "projects")
-SHEETS = ["sheets_v2.py", "sheets_permit2.py", "sheets_3571_full.py", "sheets_packet.py", "sheets_site.py"]
+SHEETS = ["sheets_v2.py", "sheets_permit2.py", "sheets_3571_full.py", "sheets_packet.py", "sheets_site.py",
+          "sheets_carport.py"]
 HUMAN = "사람이 채울 공란 식별"
 def py(): return os.environ.get("G2A_PYTHON") or sys.executable  # interpreter that can import ezdxf + numpy
 def env_for(d):
@@ -61,6 +62,7 @@ def cmd_build(a):
     for s in SHEETS:
         rc |= stage(s, d)
     rc |= stage("dxf_to_svg.py", d, [out], tools=True) | stage("audit_3571.py", d)
+    rc |= stage("text_bbox.py", d, [out, "--assert", "--quiet"], tools=True)  # 틀 밖으로 나간 텍스트 = 하드 실패
     print("[build] done · dxf=%d svg=%d" % (len(glob.glob(os.path.join(out, "*.dxf"))),
                                             len(glob.glob(os.path.join(out, "*.svg")))))
     return rc
