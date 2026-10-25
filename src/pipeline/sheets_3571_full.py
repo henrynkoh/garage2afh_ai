@@ -33,6 +33,14 @@ from sheets_v2 import HOUSE, T, ftin, new_doc, outline, p_on_wall, rect_area, sh
 from sheets_v2 import water_heater_note, wrap_notes
 import design
 
+def _beds():
+    """design.ROOMS 의 bedroom 실 수. 시트 문구가 프로그램을 따라가도록 (하드코딩 금지)."""
+    try:
+        return sum(1 for r in design.ROOMS if r.get("kind") == "bedroom")
+    except Exception:
+        return 3
+
+
 FT = 0.3048
 OUT = base.OUT
 W = design.walls_by_name()
@@ -91,7 +99,7 @@ def g01_general_notes(path):
         "3. 모든 치수는 공적기록과 현장 실측으로 확인 후 사용",
         "4. 구조: " + META.get("structure_note", "기존 외벽 유지, 신규 파티션 비내력. 헤더·개구부는 구조기술사 확인"),
         "5. 소방: 연기/CO 상호연동 + 배터리 백업 (WAC R314.4, IRC R314.3/R315.5)",
-        "6. 이그레스: 침실 3개소 이그레스 창 확보 (IRC R310, 순개구부 5.7 sqft)",
+        f"6. 이그레스: 침실 {_beds()}개소 이그레스 창 확보 (IRC R310, 순개구부 5.7 sqft)",
         "7. 에너지: WSEC 2021 외피 성능(EN-01 참조), 기밀 테스트 별도",
         "8. 설비: M/E/P 는 예비안. 최종 관경·용량은 해당 설계자 확정",
         "9. AFH: 침실 면적·문폭·화장실 접근성은 DSHS 라이선스 기준 별도 검토",
@@ -101,7 +109,11 @@ def g01_general_notes(path):
     _wh = water_heater_note()
     if _wh:
         lines.append(f"11. {_wh}")
-    note(msp, wrap_notes(lines, 74, "    "), x=0.8, y=12.8, step=0.62, h=0.19)
+    # 주기 줄 수가 늘면(예: 차고 내 온수기 주기 + 긴 META 문장) 고정 step 0.62 로는
+    # 하단 문구(y=5.4)를 침범한다. 사용 가능한 높이에 맞춰 step 을 자동 축소한다.
+    _lines = wrap_notes(lines, 74, "    ")
+    _step = min(0.62, (12.8 - 6.0) / max(len(_lines), 1))
+    note(msp, _lines, x=0.8, y=12.8, step=_step, h=0.19)
     T(msp, "이 도면 세트는 예비 검토용입니다.", 0.8, 5.4, 0.22, "TITLE")
     doc.saveas(path); return path
 
@@ -236,9 +248,11 @@ def a08_furniture(path):
     doc = new_doc(); msp = doc.modelspace()
     sheet_frame(msp, "A-08", "가구·설비 배치도")
     plan(msp)
-    beds = [("침실A", 3.0, 3.0), ("침실B", 2.0, 2.4), ("침실C", 2.6, 2.2)]
-    for name, w_ft, h_ft in beds:
-        room = next(r for r in design.ROOMS if r["name"] == name)
+    # 침대 크기(ft)는 배치 순서대로 돌려 쓴다 - 침실 개수는 프로그램(design.ROOMS)을 따른다
+    bed_sizes = [(3.0, 3.0), (2.0, 2.4), (2.6, 2.2), (3.0, 3.0)]
+    rooms = [r for r in design.ROOMS if r["kind"] == "bedroom"]
+    for i, room in enumerate(rooms):
+        w_ft, h_ft = bed_sizes[i % len(bed_sizes)]
         x1, y1, x2, y2 = room["rect"]
         cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
         w, h = w_ft * FT / 2, h_ft * FT / 2
@@ -612,7 +626,7 @@ def ls02_egress(path):
     msp.add_line(pt(2.0, 2.0), pt(2.0, 15.0), dxfattribs={"layer": "DIM"})
     msp.add_line(pt(2.0, 15.0), pt(28.0, 15.0), dxfattribs={"layer": "DIM"})
     T(msp, "피난 경로 (복도 → 외부)", pt(10.0, 15.6)[0], pt(10.0, 15.6)[1], 0.13, "DIM")
-    note(msp, ["1. 침실 3개소 이그레스 창 (순개구부 5.7 sqft, IRC R310)",
+    note(msp, [f"1. 침실 {_beds()}개소 이그레스 창 (순개구부 5.7 sqft, IRC R310)",
                "2. 복도 유효폭 36in 이상 유지", "3. 문 개구부 32in 순폭 (R311.2)",
                "4. 경보는 LS-01 참조"], x=10.8, y=12.6, step=0.46)
     doc.saveas(path); return path

@@ -145,9 +145,14 @@ def water_heater_note():
 
 def ftin(m):
     total_in = m / FT * 12.0
+    # 반올림으로 12인치가 되면 다음 피트로 올린다 (21'-12" -> 22'-0")
+    total_in = round(total_in * 20) / 20.0
     feet = int(total_in // 12)
     inch = total_in - feet * 12
     if abs(inch - round(inch)) < 0.05:
+        inch = round(inch)
+        if inch >= 12:
+            feet, inch = feet + 1, 0
         return f"{feet}'-{int(round(inch))}\""
     return f"{feet}'-{inch:.1f}\""
 

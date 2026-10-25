@@ -25,6 +25,17 @@ OUT = base.OUT
 META = design.META
 
 
+def _door_wall_label():
+    """실제 내벽 중 침실이 붙은 벽 이름을 돌려준다 (S-01 헤더 위치 표기)."""
+    try:
+        for w in design.WALLS:
+            if not w["exterior"] and "침실" in w["name"]:
+                return w["name"]
+    except Exception:
+        pass
+    return "내벽/복도"
+
+
 def pt(x_ft, y_ft):
     return (x_ft * FT, y_ft * FT)
 
@@ -253,7 +264,7 @@ def sheet_structural(path):
     sched(msp, [
         ("부재", "위치", "예비 단면", "비고"),
         ("헤더 H1", META.get("opening_label", "차고도어 개구부"), "2-1.75x11.875 LVL", "EOR 확인"),
-        ("헤더 H2", "침실C/복도", "2x10 DF#2", "비내력"),
+        ("헤더 H2", _door_wall_label(), "2x10 DF#2", "비내력"),
         ("스터드", "신규 파티션", "2x4 @16 o.c.", "8ft"),
         ("슬래브", META.get("slab_label", "기존 차고 바닥"), "기존 유지", "레벨·균열"),
         ("앵커", "신규 벽 하부", "1/2in @48in", "슬래브 천공"),

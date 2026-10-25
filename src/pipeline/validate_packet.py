@@ -83,7 +83,17 @@ def main():
     # PDF 페이지 수
     _cands = sorted(glob.glob(os.path.join(OUT, "pdf", "*.pdf")))
     _ds = [c for c in _cands if "도면세트" in os.path.basename(c)]
-    pdf = (_ds or _cands or [os.path.join(OUT, "pdf", "3571-cassie-도면세트.pdf")])[0]
+    if _ds:
+        pdf = _ds[0]
+    else:  # 파일명 규칙이 다른 프로젝트: 가장 많은 페이지를 가진 PDF = 도면 세트
+        def _np(path):
+            try:
+                _o = subprocess.run([PDFINFO, path], capture_output=True, text=True).stdout
+                _m = re.search(r"Pages:\s+(\d+)", _o)
+                return int(_m.group(1)) if _m else 0
+            except Exception:
+                return 0
+        pdf = max(_cands, key=_np) if _cands else os.path.join(OUT, "pdf", "plans.pdf")
     pages = None
     if os.path.exists(pdf):
         try:

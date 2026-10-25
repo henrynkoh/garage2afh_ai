@@ -81,7 +81,8 @@ def g03_property(path):
 
 def g04_application(path):
     doc = new_doc(); msp = doc.modelspace()
-    sheet_frame(msp, "G-04", f"허가 신청 데이터 ({META.get('jurisdiction', 'City of Tumwater')})")
+    _jur = META.get("jurisdiction", "City of Tumwater")
+    sheet_frame(msp, "G-04", f"허가 신청 데이터 - {_jur}")
     fields = [
         ("Permit type", "Residential Alteration / Change of Use (AFH)"),
         ("Project address", f"{META['project']}, {META['city']}"),
@@ -102,15 +103,28 @@ def g04_application(path):
         ("Project no.", META["project_no"]),
         ("Code year", "2021 IRC + WA amendments, 2021 WSEC"),
     ]
+    fields = fields + [tuple(r) for r in (META.get("g04_extra") or [])]  # 범위 각주 행 (META-driven)
+    foots = [str(s) for s in (META.get("g04_footnote") or [])]
+    # 각주를 넣을 때는 표 행 간격을 줄여 프레임 안에 함께 넣는다
+    step = min(0.72, (12.9 - 5.2) / max(1, len(fields))) if foots else 0.72
     y = 12.9
     for label, value in fields:
         T(msp, label, 0.8, y, 0.15, "TITLE")
         T(msp, value, 5.0, y, 0.15, "TEXT")
         msp.add_line((0.8, y - 0.12), (19.6, y - 0.12), dxfattribs={"layer": "DIM"})
-        y -= 0.72
-    T(msp, "서명: 건축주 ______________________   날짜 __________", 0.8, 1.9, 0.18, "TEXT")
-    T(msp, "(이 시트는 신청 양식 항목을 정리한 것으로, 시 공식 양식 제출이 별도로 필요합니다.)",
-      0.8, 1.3, 0.14, "NOTE")
+        y -= step
+    if foots:
+        fy = 4.4
+        for s in foots:
+            T(msp, s, 0.8, fy, 0.15, "NOTE")
+            fy -= 0.42
+        T(msp, "서명: 건축주 ______________________   날짜 __________", 0.8, 2.7, 0.18, "TEXT")
+        T(msp, "(이 시트는 신청 양식 항목을 정리한 것으로, 시 공식 양식 제출이 별도로 필요합니다.)",
+          0.8, 2.1, 0.14, "NOTE")
+    else:
+        T(msp, "서명: 건축주 ______________________   날짜 __________", 0.8, 1.9, 0.18, "TEXT")
+        T(msp, "(이 시트는 신청 양식 항목을 정리한 것으로, 시 공식 양식 제출이 별도로 필요합니다.)",
+          0.8, 1.3, 0.14, "NOTE")
     doc.saveas(path); return path
 
 
@@ -188,7 +202,8 @@ def g06_coordination(path):
     ]
     rows = [("#", "항목", "출처 간 차이", "처리")] + \
         [(str(i), a, b, c) for i, (a, b, c) in enumerate(disc, start=1)]
-    table(msp, rows, x=0.8, y=12.9, cols=[0.0, 0.7, 2.6, 7.6], step=0.5, h=0.12)
+    _step = min(0.5, (12.9 - 9.6) / max(1, len(rows)))  # 주기 블록(y=7.6)과 겹치지 않게
+    table(msp, rows, x=0.8, y=12.9, cols=[0.0, 0.7, 2.6, 7.6], step=_step, h=0.12)
     notes = [
         "이 표는 제출 전 해소해야 할 상충 항목 기록입니다.",
         "확인 전까지 도면의 legal/zoning 표기는 카운티 기록을 따릅니다.",
