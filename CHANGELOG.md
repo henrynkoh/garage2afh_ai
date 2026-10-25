@@ -13,8 +13,9 @@ URL. There is now one gallery page over all of them, and one command that keeps 
 | `projects.json` (new) | 6 objects, newest build first: slug, address, city, jurisdiction, zoning, parcel, year_built, garage_type, garage_sf, program, sheets, pages, audit, branch_note, pdf, built |
 | `package.html` | accepts `?doc=<relative pdf path>` (+ `&title=`, `&pages=`), so the gallery reuses the existing viewer; the 71-page default still works when the parameter is absent |
 | `docs/projects/<slug>/` | the master PDF of each project, 2.7–4.4 MB each |
-| `g2a.py publish-index` (new) | scans `projects/*/` plus `--extra <path>`, reads META + `out/validation.json` + `out/submit/*.pdf`, rewrites `projects.json`, the README button count, and `docs/projects/UPLOAD-PLAN.md` |
+| `g2a.py publish-index` (new) | scans `projects/*/` plus `--extra <path>`, reads META + `out/validation.json` + `out/submit/*.pdf`, rewrites `projects.json`, the README button count, the `index.html` button count, and `docs/projects/UPLOAD-PLAN.md` |
 | README | `▶ **[전체 프로젝트 보기 (N개) — 완성된 패키지 모음](…/projects.html)**` inside the `## 라이브 주소` block |
+| `index.html` | a third hero button, `전체 프로젝트 보기 <span data-count>(6개)</span> · All projects`, white/outline so it sits next to the blue and red buttons without competing with them; it counts `projects.json` at load and hides the number if that fetch fails |
 
 `?doc=` is checked before use: a value with a scheme, a leading `/`, or `..` is ignored, so the
 parameter cannot turn the viewer into a link to somebody else's document. When the document is
@@ -40,7 +41,9 @@ when the master has *fewer* pages than the drawing set (a binding defect), not m
 ### How a new project lands on the gallery
 
 New projects appear on the gallery automatically after `publish-index` + PDF upload — no HTML
-edit, no build step, no separate index file to keep in sync.
+edit, no build step, no separate index file to keep in sync. The landing page button and the
+README button both carry a count, and both counts are rewritten by the same run (`index.html`
+keeps a static number for the moment before the fetch resolves).
 
 ```
 python3 g2a.py publish-index --extra ../HouseBIM/projects/3571-cassie   # rewrite json + README count + plan

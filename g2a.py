@@ -6,7 +6,7 @@
     g2a.py bind  <slug> [--binder PATH]            packet + index + master PDF
     g2a.py check <slug>                            validator; exit 1 on hard fail
     g2a.py status [slug]                           state of one or all projects
-    g2a.py publish-index [--extra PATH]            projects.json + README count + upload plan
+    g2a.py publish-index [--extra PATH]            projects.json + README count + index.html count + upload plan
 This CLI imports nothing from the pipeline: each stage runs as its own child process with
 HOUSEBIM_DESIGN_DIR and HOUSEBIM_OUT exported (the original HouseBIM contract), so a broken
 stage cannot corrupt the next one and one bad project cannot touch another.
@@ -310,6 +310,15 @@ def cmd_publish_index(a):
             open(rp, "w", encoding="utf-8").write(new)
         print("[publish-index] README button  %s" % ("count = %d" % len(rows) if n else "line not found"))
 
+    ip = os.path.join(REPO, "index.html")          # static fallback for the landing-page button
+    if os.path.exists(ip):
+        txt = open(ip, encoding="utf-8").read()
+        new, n = re.subn(r"(<span data-count>\()\d+",
+                         lambda m: "%s%d" % (m.group(1), len(rows)), txt)
+        if n:
+            open(ip, "w", encoding="utf-8").write(new)
+        print("[publish-index] index.html button  %s" % ("count = %d" % len(rows) if n else "data-count span not found"))
+
     plan = os.path.join(REPO, GALLERY_ROOT, "UPLOAD-PLAN.md")
     os.makedirs(os.path.dirname(plan), exist_ok=True)
     L = ["# 마스터 PDF 업로드 계획", "",
@@ -356,7 +365,7 @@ if __name__ == "__main__":
     sp.choices["build"].add_argument("--clean", action="store_true", help="delete stale dxf/svg/pdf first")
     sp.choices["bind"].add_argument("--binder", help="path to the project bind_master.py")
     sp.add_parser("status", help="state of one or all projects").add_argument("slug", nargs="?")
-    pi = sp.add_parser("publish-index", help="rewrite projects.json + README count + upload plan")
+    pi = sp.add_parser("publish-index", help="rewrite projects.json + README/index.html counts + upload plan")
     pi.add_argument("--extra", action="append", metavar="PATH",
                     help="project folder outside projects/ (repeatable), e.g. ../HouseBIM/projects/3571-cassie")
     a = ap.parse_args()

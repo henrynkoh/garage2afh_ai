@@ -257,13 +257,14 @@ PDF page count. `-` means the JSON has not been written yet.
 python3 g2a.py publish-index [--extra PATH ...]
 ```
 
-Rewrites the three things the gallery is built from. Run it after `build`/`bind`/`check` on any
+Rewrites the four things the gallery is built from. Run it after `build`/`bind`/`check` on any
 project, and again whenever a new project folder appears.
 
 | Writes | What it is |
 |---|---|
 | `projects.json` | one object per project, newest build first — the only input `projects.html` reads |
 | `README.md` | the count inside `▶ **[전체 프로젝트 보기 (N개) …]**`, nothing else |
+| `index.html` | the static fallback count inside the landing page button `<span data-count>(N개)</span>` |
 | `docs/projects/UPLOAD-PLAN.md` | per-project upload table: target repo path, source path, size, pages |
 
 Scanned: every `projects/<slug>/` that has a `design.py`, plus each `--extra <path>` you pass for
@@ -284,6 +285,7 @@ $ python3 g2a.py publish-index --extra ../HouseBIM/projects/3571-cassie
 
 [publish-index] missing: 없음 (모든 프로젝트 완비)
 [publish-index] README button  count = 6
+[publish-index] index.html button  count = 6
 [publish-index] upload plan  docs/projects/UPLOAD-PLAN.md
 ```
 
@@ -332,6 +334,7 @@ projects/<slug>/
   out/appendix/            appendix blocks + index
   out/submit/              address-named files, exactly what goes to the portal
 projects.json              gallery data: one object per project (written by publish-index)
+index.html                 landing page; the 전체 프로젝트 보기 button count is rewritten by publish-index
 projects.html              all-projects gallery (GitHub Pages, no build step)
 docs/projects/<slug>/      the master PDF of each project, as served on the site
 docs/projects/UPLOAD-PLAN.md  which PDF still has to be uploaded (written by publish-index)
