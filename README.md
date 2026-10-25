@@ -96,3 +96,10 @@ index.html              landing page (GitHub Pages ready)
 
 MIT. Generated drawings are engineering drafts, not stamped instruments; the operator
 remains responsible for code compliance in the authority having jurisdiction.
+
+## Changelog
+
+Pipeline changes are recorded in [CHANGELOG.md](CHANGELOG.md) — newest first, with the
+measured before/after numbers for every rebuild. Latest entry: META-driven jurisdiction and
+provenance, the carport-enclosure branch (S-04 / A-19), the footer disclaimer wrapped inside
+the frame, and the META-gated water-heater note.
