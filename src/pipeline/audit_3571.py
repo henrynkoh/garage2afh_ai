@@ -69,18 +69,21 @@ def run_checks():
     beds = [r for r in ROOMS if r["kind"] == "bedroom"]
     baths = [r for r in ROOMS if r["kind"] == "bath"]
 
+    _opening = str(getattr(design, "META", {}).get("opening_label", "기존 차고도어"))
+
     # 1) 문서/구조 (C01-C10)
     add("C01", "문서", "도면 세트 12장 이상 존재", True, "생성 파이프라인 확인")
     add("C02", "문서", "프로젝트 번호 기재", bool(getattr(design, "META", {}).get("project_no")),
         getattr(design, "META", {}).get("project_no", "없음"))
-    add("C03", "문서", "대지/시 주소 기재", "Tumwater" in getattr(design, "META", {}).get("city", ""),
-        getattr(design, "META", {}).get("city", "없음"))
+    _city = getattr(design, "META", {}).get("city", "")
+    add("C03", "문서", "대지/시 주소 기재", bool(_city.strip()) and "CITY, ST" not in _city
+        and "," in _city, _city or "없음")
     add("C04", "문서", "원안 건축사 명시", bool(getattr(design, "META", {}).get("architect")))
     add("C05", "문서", "스키매틱 경고 문구 포함", True, "각 시트 타이틀 블록")
     add("C06", "구조", "외벽 4면 존재", len([w for w in WALLS if w["exterior"]]) >= 4,
         f"{len([w for w in WALLS if w['exterior']])}면")
     add("C07", "구조", "신규 파티션 비내력 표기", True, "S-01 참조")
-    add("C08", "구조", "차고도어 헤더 유지 표기", True, "S-01 / A-18")
+    add("C08", "구조", "개구부 헤더 유지/보강 표기", True, "S-01 / A-18 · " + _opening)
     add("C09", "구조", "슬래브 기존 유지 표기", True, "S-02")
     add("C10", "구조", "구조기술사 검토 문구", True, "S-01 주기")
 
@@ -101,7 +104,8 @@ def run_checks():
     add("C18", "치수", "욕실 최소 35 SF", all(area(r["rect"]) / SF >= 35 for r in baths),
         ", ".join(f"{r['name']}={area(r['rect'])/SF:.0f}SF" for r in baths))
     add("C19", "치수", "복도 폭 36in 이상", True, "복도 2.83 ft ≈ 34in (확인 필요)")
-    add("C20", "치수", "천장고 10'-5\" 표기", "10'-5" in ft_in(H["wall_height"]), ft_in(H["wall_height"]))
+    add("C20", "치수", "천장고 표기", "10'-5" in ft_in(H["wall_height"]),
+        ft_in(H["wall_height"]) + " · " + str(getattr(design, "META", {}).get("existing_ceiling", "")))
 
     # 3) 벽/구획 (C21-C30)
     add("C21", "벽", "외벽 두께 6in", all(abs(w["t"] - 0.1524) < 0.02 for w in WALLS if w["exterior"]),
@@ -114,7 +118,7 @@ def run_checks():
     add("C25", "벽", "모든 실이 벽으로 둘러싸임", True, "스키매틱 기준")
     add("C26", "벽", "욕실 인접 파티션 존재", True, "W05")
     add("C27", "벽", "HVAC실 별도 구획", any(r["kind"] == "mech" for r in ROOMS), "HVAC")
-    add("C28", "벽", "차고도어 개구부 표기", True, "A-18")
+    add("C28", "벽", "개구부 폐쇄면 표기", True, "A-18")
     add("C29", "벽", "신규 개구부 헤더 표기", True, "S-01 H2")
     add("C30", "벽", "방수 구획(욕실) 표기", True, "A-16")
 
@@ -147,7 +151,7 @@ def run_checks():
     add("C47", "이그레스", "침실별 이그레스 창", True, "WD01/02/03")
     add("C48", "이그레스", "피난 경로 도면", True, "LS-02")
     add("C49", "이그레스", "복도 유효폭 표기", True, "LS-02 주기")
-    add("C50", "이그레스", "외부 개구부 확보", True, "기존 차고도어")
+    add("C50", "이그레스", "외부 개구부 확보", True, _opening)
 
     # 6) 설비 M (C51-C58)
     add("C51", "기계", "욕실 배기팬 표기", True, "EF-1 80 CFM")
