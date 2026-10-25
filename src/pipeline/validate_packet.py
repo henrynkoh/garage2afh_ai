@@ -33,6 +33,15 @@ EXPECTED = [
     "P-02", "P-03", "P-04", "LS-01", "LS-02", "EN-01", "EN-02", "EN-03",
 ]
 
+# 카포트 외벽화 범위(META['carport_enclosure']) 프로젝트는 S-04 / A-19 를 추가해 45장.
+# 다른 프로젝트(3571 등)는 43장 기본 세트를 그대로 쓴다.
+try:
+    _d = __import__("design")
+    if getattr(_d, "META", {}).get("carport_enclosure"):
+        EXPECTED = EXPECTED + ["S-04", "A-19"]
+except Exception:
+    pass
+
 # 신청자/서명처럼 사람이 반드시 채워야 하는 공란 (정보성 경고)
 HUMAN_FIELDS = ["(성명", "(LIC#", "(건축주", "(미포함)", "TBD", "미기재"]
 
@@ -72,7 +81,9 @@ def main():
         add("자동검사 74/74", False, f"읽기 실패 {e}")
 
     # PDF 페이지 수
-    pdf = os.path.join(OUT, "pdf", "3571-cassie-도면세트.pdf")
+    _cands = sorted(glob.glob(os.path.join(OUT, "pdf", "*.pdf")))
+    _ds = [c for c in _cands if "도면세트" in os.path.basename(c)]
+    pdf = (_ds or _cands or [os.path.join(OUT, "pdf", "3571-cassie-도면세트.pdf")])[0]
     pages = None
     if os.path.exists(pdf):
         try:
@@ -100,10 +111,13 @@ def main():
         return open(p, encoding="utf-8", errors="ignore").read() if os.path.exists(p) else ""
     g03 = svg_text("G-03_부동산정보")
     c01 = svg_text("C-01_대지주차계획")
-    num_ok = ("9,411" in g03 and "4038-00-00700" in g03 and "Concrete" in g03)
-    add("G-03 수치(카운티) 반영", num_ok, "9,411 / Tax-ID / Concrete" if num_ok else "누락")
-    cov_ok = ("37.6" in c01 and "9,357" in c01)
-    add("C-01 수치(측량) 반영", cov_ok, "9,357 SF / 37.6%" if cov_ok else "누락")
+    _m = getattr(__import__("design"), "META", {})
+    _lot = f"{_m.get('lot_sf_assessor', _m.get('lot_sf_survey', 9411)):,}"
+    num_ok = (_lot in g03 and _m.get("tax_id", "4038-00-00700") in g03
+              and _m.get("foundation", "Concrete").split()[0] in g03)
+    add("G-03 수치(카운티) 반영", num_ok, f"{_lot} / Tax-ID / 기초" if num_ok else "누락")
+    cov_ok = (str(_m.get("coverage_pct", 37.6)) in c01 and _lot in c01)
+    add("C-01 수치(측량) 반영", cov_ok, f"{_lot} SF / {_m.get('coverage_pct', 37.6)}%" if cov_ok else "누락")
 
     passed = sum(1 for r in results if r["result"] == "PASS")
     payload = {"total": len(results), "passed": passed, "results": results,
