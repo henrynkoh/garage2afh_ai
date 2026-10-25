@@ -3,6 +3,73 @@
 All notable pipeline changes. Dates are the day the change was rebuilt and verified on
 real projects (3571 Cassie Dr SW, 7504 32nd Ave SE, 1713 Winterwood Dr).
 
+## 0.3.0 — 2026-10-24 — program-aware audit (checks derive from design.py)
+
+### The defect
+
+`audit_3571.py` carried the 3571 Cassie reference program as literal expectations:
+3 bedrooms, 736 SF internal, 12+ walls, 6+ doors, exactly 3 egress windows, "10'-5""
+encoded as a substring test and a mandatory HVAC room. A legitimately smaller program
+therefore failed checks that are not code violations. On the real 133 Jalyn St project
+(2 bedrooms, 528 SF detached garage conversion, third AFH bedroom in the existing house)
+the audit scored **67/74** with 7 failures that were all reference-program mismatches:
+C15 침실 3개, C20 천장고 10'-5", C24 벽 12개 이상, C27 HVAC실, C31 문 6개 이상,
+C35 침실별 출입문 3개, C37 이그레스 창 3개. Only C15/C35/C37 were even arguably about the
+smaller program; the rest were pure hardcoding.
+
+### The fix — every expectation is derived from the project's own design.py
+
+| check | before | after |
+|---|---|---|
+| C15 침실 | `len(beds) == 3` | label `침실 N개 (설계 기준)`; `N == ROOMS kind=='bedroom'`, cross-checked against the bedroom count declared in META (`scope_kr` / `scope` / `proposed_use`) |
+| C20 천장고 | `"10'-5\"" in ft_in(wall_height)` | `wall_height` vs `META['ceiling']` (declared design basis); with no measured ceiling (`existing_ceiling_measured`) the check passes WARN-style with detail `설계 기준값 (현장 실측 필요)` instead of FAIL |
+| C21/C22 벽 두께 | detail from `WALLS[0]` / `WALLS[4]` | first exterior / first interior wall, `내벽 없음` when a program has none |
+| C24 벽 | `len(WALLS) >= 12` | `len(WALLS)` (label only) + every ROOM must be bounded on 4 sides by wall segments within 0.15 m (`bounding_walls()`) |
+| C25 실 중복 | always PASS (`스키매틱 기준`) | room rectangles must not overlap (area double counting) |
+| C26 욕실 파티션 | always PASS | bathroom must have at least one bounding wall (detail names it) |
+| C27 HVAC실 | mech room mandatory | if ROOMS has `kind=='mech'`, that room must be ≥1 m² and enclosed on ≥3 sides; if the program has no separate mech room the detail is `n/a (설계에 별도 기계실 없음)` |
+| C31 문 | `len(DOORS) >= 6` | label `문 N개 (설계 기준)`; every door must resolve a host wall in `WALLS` |
+| C32 문 폭 | ≥0.81 m, offenders by name | unchanged rule, detail now shows each offender's width in inches |
+| C35 침실 출입문 | `>= 3` | `>= len(beds)` |
+| C36 창 | `len(WINDOWS) >= 4` | `>= len(beds) + 1` |
+| C37 이그레스 창 | `== 3` | `== len(beds)` |
+| C39 창턱 | `max(sill)` over all windows | `max(sill)` over egress windows only, 0.0 default |
+| C13 면적 | `META['internal_sf']` default 736 | `META['internal_sf']`, else 95% of the plate |
+
+Egress area (C38, C41-C47), smoke/CO (C41-C44), MEP (C51-C70), energy (C71-C74) and
+provenance (C01-C10) checks are untouched. Total stays at 74 checks; `warn: true` on a
+PASS row renders an amber row in `report_full.html` and is counted as passed.
+
+### Proof that a smaller program is no longer punished, and defects still fail
+
+Rejected-defect injections (each one applied to a copy of `design.py`, then the audit run):
+
+| inject | result |
+|---|---|
+| baseline 133 (2 bed / 528 SF, no injection) | 74/74, only C20 WARN (설계 기준값) |
+| delete the 침실B ROOM (META declares 2) | C15 FAIL (1 bedroom vs declared 2) |
+| wall_height 9'-0" vs META ceiling 8'-0" | C20 FAIL |
+| delete wall W08 (욕실/수납) | C24 FAIL (room unbounded) |
+| move 복도 rect onto 침실A | C25 FAIL (overlap) |
+| door D04 hosted on a non-existent wall | C31 FAIL |
+| bathroom door 2'-0" wide | C32 FAIL |
+| drop 2 windows (3 required) | C36 FAIL |
+| relabel WD02 without "이그레스" | C37 FAIL |
+| 1713: move HVAC room off its walls | C27 FAIL |
+
+### Rebuilt and re-verified on all four projects (this version)
+
+| project | program | sheets | audit | validator | master | A3 only | blank/dark @18dpi | text-bbox |
+|---|---|---|---|---|---|---|---|---|
+| 133-jalyn-st | 2 bed / 528 SF | 43 | 67/74 → **74/74** | 7/7 | 47 p | yes | 0 / 0 | ok |
+| 1713-winterwood-dr | 3 bed / 720 SF | 43 | 74/74 → **74/74** | 7/7 | 47 p | yes | 0 / 0 | ok |
+| 7504-32nd-ave-se | carport enclosure | 45 | 74/74 → **74/74** | 7/7 | 49 p | yes | 0 / 0 | ok |
+| 3571-cassie | 3 bed / 736 SF | 43 | 74/74 → **74/74** | 7/7 | 71 p | yes | 0 / 0 | ok |
+
+PDFs were re-rendered (A3 landscape, `preferCSSPageSize`), no trailing blank page was
+produced, and the 3571 appendix B/C/D Letter sources stay Letter until the binder's
+documented Letter→A3 normalisation, so the bound masters contain A3 pages only.
+
 ## 2026-10-24 — META-driven sets, carport branch, frame-safe footer
 
 ### Jurisdiction and provenance are META-driven (no hardcoded Tumwater / 3571)
