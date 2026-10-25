@@ -22,6 +22,7 @@ import design
 
 FT = 0.3048
 OUT = base.OUT
+META = design.META
 
 
 def pt(x_ft, y_ft):
@@ -137,7 +138,7 @@ def sheet_mechanical(path):
     ], y_m=12.6)
     note_block(msp, [
         "장비 용량은 예비안. 최종 선정·경로는 기계설비 설계자 확정.",
-        "욕실 배기: 덕트 최단, 외벽 후드 높이 A01.4 확인.",
+        "욕실 배기: 덕트 최단, 외벽 후드 높이는 설계자 확인.",
         "전기 히트펌프 가정(연소기기 없음) — CO는 차고 인접 기준.",
     ], y_m=9.4)
     doc.saveas(path)
@@ -244,17 +245,17 @@ def sheet_structural(path):
         if w["exterior"]:
             msp.add_lwpolyline(outline(w), close=True, dxfattribs={"layer": "WALL-EXT"})
 
-    # 차고도어 개구부 헤더 표시
+    # 개구부 헤더 표시 (차고도어 또는 카포트 오픈 페이스 - META)
     msp.add_line(pt(21.5, 0.0), pt(31.0, 0.0), dxfattribs={"layer": "DOOR"})
-    tag(msp, "기존 차고도어 개구부 + 내부 스킨월", pt(22.0, 0.6)[0], pt(22.0, 0.6)[1], "DOOR", 0.11)
+    tag(msp, META.get("opening_label", "기존 차고도어 개구부"), pt(22.0, 0.6)[0], pt(22.0, 0.6)[1], "DOOR", 0.11)
     tag(msp, "기존 외벽(유지) / 신규 파티션(비내력 2x4)", pt(0.4, 27.4)[0], pt(0.4, 27.4)[1], "NOTE", 0.12)
 
     sched(msp, [
         ("부재", "위치", "예비 단면", "비고"),
-        ("헤더 H1", "차고도어 개구부", "2-1.75x11.875 LVL", "EOR 확인"),
+        ("헤더 H1", META.get("opening_label", "차고도어 개구부"), "2-1.75x11.875 LVL", "EOR 확인"),
         ("헤더 H2", "침실C/복도", "2x10 DF#2", "비내력"),
         ("스터드", "신규 파티션", "2x4 @16 o.c.", "8ft"),
-        ("슬래브", "기존 차고 바닥", "기존 유지", "레벨·균열"),
+        ("슬래브", META.get("slab_label", "기존 차고 바닥"), "기존 유지", "레벨·균열"),
         ("앵커", "신규 벽 하부", "1/2in @48in", "슬래브 천공"),
     ], y_m=12.2, cols=[0.0, 1.6, 3.8, 6.6], step=0.4)
     note_block(msp, [
