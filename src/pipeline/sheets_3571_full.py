@@ -30,11 +30,13 @@ if DESIGN_DIR not in sys.path:
 
 import sheets_v2 as base
 from sheets_v2 import HOUSE, T, ftin, new_doc, outline, p_on_wall, rect_area, sheet_frame
+from sheets_v2 import water_heater_note, wrap_notes
 import design
 
 FT = 0.3048
 OUT = base.OUT
 W = design.walls_by_name()
+META = design.META
 
 
 def pt(fx, fy):
@@ -84,10 +86,10 @@ def g01_general_notes(path):
     doc = new_doc(); msp = doc.modelspace()
     sheet_frame(msp, "G-01", "일반주기 및 코드 요약")
     lines = [
-        "1. 적용 코드: 2021 IRC (WA 개정), 2021 WSEC, Tumwater 시 조례, WAC 388-76(AFH)",
-        "2. 이 세트는 Canarch Designs A01.3/A01.4 를 옮긴 스키매틱이며 시공용이 아님",
-        "3. 모든 치수는 A01.4 원본과 현장 실측으로 확인 후 사용",
-        "4. 구조: 기존 외벽 유지, 신규 파티션 비내력. 헤더·개구부는 구조기술사 확인",
+        f"1. 적용 코드: 2021 IRC (WA 개정), 2021 WSEC, {design.META.get('jurisdiction', 'Tumwater')} 시 조례, WAC 388-76(AFH)",
+        f"2. 이 세트는 {design.META.get('source_drawings', 'Canarch Designs A01.3/A01.4')} 기반 스키매틱이며 시공용이 아님",
+        "3. 모든 치수는 공적기록과 현장 실측으로 확인 후 사용",
+        "4. 구조: " + META.get("structure_note", "기존 외벽 유지, 신규 파티션 비내력. 헤더·개구부는 구조기술사 확인"),
         "5. 소방: 연기/CO 상호연동 + 배터리 백업 (WAC R314.4, IRC R314.3/R315.5)",
         "6. 이그레스: 침실 3개소 이그레스 창 확보 (IRC R310, 순개구부 5.7 sqft)",
         "7. 에너지: WSEC 2021 외피 성능(EN-01 참조), 기밀 테스트 별도",
@@ -95,7 +97,11 @@ def g01_general_notes(path):
         "9. AFH: 침실 면적·문폭·화장실 접근성은 DSHS 라이선스 기준 별도 검토",
         "10. Own-builder 제출 (시 담당자 확인: 건축사·구조기술사 서명 불요)",
     ]
-    note(msp, lines, x=0.8, y=12.8, step=0.62, h=0.19)
+    # META['water_heater'] 가 차고 내 설치를 말할 때만 주기를 추가한다 (META-driven)
+    _wh = water_heater_note()
+    if _wh:
+        lines.append(f"11. {_wh}")
+    note(msp, wrap_notes(lines, 74, "    "), x=0.8, y=12.8, step=0.62, h=0.19)
     T(msp, "이 도면 세트는 예비 검토용입니다.", 0.8, 5.4, 0.22, "TITLE")
     doc.saveas(path); return path
 
@@ -108,7 +114,7 @@ def g02_legend(path):
         ("G-00", "표지"), ("G-01", "일반주기"), ("G-02", "범례/목록"),
         ("A-01", "기존 평면"), ("A-02", "제안 평면"), ("A-05", "치수 평면"),
         ("A-06", "마감 평면"), ("A-07", "반사천장"), ("A-08", "가구 배치"),
-        ("A-13", "단면 A-A"), ("A-14", "단면 B-B"), ("A-15..18", "상세 4종"),
+        ("A-13", "단면 A-A"), ("A-14", "단면 B-B"), ("A-15..18", META.get("a18_title_kr", "상세 4종")),
         ("S-01", "구조 계획"), ("S-02", "기초/슬래브"), ("S-03", "지붕/장선"),
         ("M-01", "설비 개념"), ("M-02", "기계 평면"), ("M-03", "덕트 계통"),
         ("E-01", "전기 평면"), ("E-02", "조명 평면"), ("E-03", "동력 결선"),
@@ -116,6 +122,8 @@ def g02_legend(path):
         ("LS-01", "연기/CO"), ("LS-02", "이그레스"),
         ("EN-01", "외피 요약"), ("EN-02", "창호 성능"),
     ]
+    if META.get("carport_enclosure"):
+        rows += [("S-04", "카포트 외벽화 구조"), ("A-19", "기존 1층 재구성")]
     table(msp, rows, x=0.8, y=13.4, cols=[0, 2.2], step=0.36, h=0.15)
     T(msp, "범례", 10.8, 13.4, 0.22, "TITLE")
     legend = [
@@ -142,7 +150,7 @@ def s02_foundation(path):
     x1, y1, x2, y2 = HOUSE["footprint"]
     msp.add_lwpolyline([(x1, y1), (x2, y1), (x2, y2), (x1, y2)], close=True,
                        dxfattribs={"layer": "DIM"})
-    note(msp, [
+    note(msp, design.META.get("s02_notes") or [
         "1. 기존 차고 슬래브 유지 (두께·철근 상태 현장 확인)",
         "2. 신규 파티션 하부: 1/2in 앵커 @48in, 슬래브 천공 후 에폭시 정착",
         "3. 바닥 마감: 기존 슬래브 위 방습·단열·마감층 (상세 A-15 참조)",
@@ -158,7 +166,7 @@ def s03_roof(path):
     plan(msp, labels=False)
     for x in range(2, 31, 4):
         msp.add_line(pt(x, 0.5), pt(x, 26.3), dxfattribs={"layer": "WALL-INT"})
-    note(msp, [
+    note(msp, design.META.get("s03_notes") or [
         "1. 기존 지붕 구조 유지 (트러스/서까래 현장 확인)",
         "2. 천장 장선: 기존 구조에 매달기, 신규 하중 없음",
         "3. 신규 파티션 상부: 천장 장선 사이 블로킹",
@@ -216,7 +224,7 @@ def a07_rcp(path):
         msp.add_lwpolyline([(cx, cy - 0.3), (cx, cy + 0.3)], dxfattribs={"layer": "DOOR"})
         T(msp, "2x4 LED", cx + 0.35, cy - 0.05, 0.12, "TEXT")
     note(msp, [
-        "1. 천장고: 10'-5\" (A01.4), 마감 후 실내고 확인",
+        "1. 천장고: 10'-5\" (설계 기준), 마감 후 실내고 확인",
         "2. 신규 파티션은 천장까지 (방음·차음)",
         "3. LED 2x4 패널, 조광 가능, 난연 등급",
         "4. 욕실: 방습 천장재 + 배기팬(EF-1)",
@@ -302,7 +310,7 @@ def a12_area_summary(path):
         a = rect_area(room["rect"])
         rows.append((room["name"], f"{a:.2f}", f"{a/(FT*FT):.0f}"))
     table(msp, rows, x=0.8, y=13.2, cols=[0, 4.0, 6.6], step=0.36, h=0.14)
-    note(msp, ["A01.4 표기 내부면적 736 SF 와 대조 필요",
+    note(msp, [f"설계 기준 내부면적 {design.META.get('internal_sf', 736)} SF 와 대조 필요",
                "AFH 침실 최소 면적 기준은 DSHS 규정 확인"], x=10.8, y=12.6, step=0.5)
     doc.saveas(path); return path
 
@@ -327,7 +335,7 @@ def section_sheet(path, code, title, cut_y_ft):
             msp.add_line((xpos, base_y), (xpos, base_y + h), dxfattribs={"layer": "WALL-INT"})
     T(msp, f"CEILING {ftin(h)}", 0.8, base_y + h + 1.05, 0.18, "DIM")
     T(msp, f"단면 위치: y = {cut_y_ft:.1f} ft", 0.8, base_y - 0.6, 0.18, "NOTE")
-    note(msp, ["1. 천장고 10'-5\" (A01.4)", "2. 지붕 구조는 기존 유지",
+    note(msp, ["1. 천장고 10'-5\" (설계 기준)", "2. 지붕 구조는 기존 유지",
                "3. 천장 단열 R-49 (EN-01)", "4. 벽체 구성은 A-15 상세 참조"],
          x=10.8, y=12.6, step=0.46)
     doc.saveas(path); return path
@@ -378,7 +386,110 @@ def a17_roof_detail(path):
     doc.saveas(path); return path
 
 
+def a18_carport_opening(path):
+    """카포트 개구부 폐쇄 상세 (carport opening closure) - 외벽화 프로젝트 전용."""
+    doc = new_doc(); msp = doc.modelspace()
+    CP = getattr(design, "CARPORT", {})
+    w = CP.get("width_ft", 20.0) * FT
+    H = CP.get("wall_h_ft", 8.0) * FT
+
+    sheet_frame(msp, "A-18", META.get("a18_title_kr", "카포트 개구부 폐쇄 상세") + " (opening closure)")
+
+    # ---------------- 입면 1:50 (좌상)
+    ex, ey = 0.9, 9.5
+    T(msp, "입면 1:50 · 폐쇄되는 기존 오픈 페이스 (정면)", ex, ey + H + 0.78, 0.18, "TITLE")
+    msp.add_lwpolyline([(ex, ey), (ex + w, ey), (ex + w, ey + H), (ex, ey + H)],
+                       close=True, dxfattribs={"layer": "WALL-EXT"})
+    for px, nm in ((ex, "P-1"), (ex + w - 0.2, "P-2")):
+        msp.add_lwpolyline([(px, ey), (px + 0.2, ey), (px + 0.2, ey + H), (px, ey + H)],
+                           close=True, dxfattribs={"layer": "WALL-EXIST"})
+        T(msp, nm, px + 0.03, ey - 0.24, 0.11, "WALL-EXIST")
+    msp.add_line((ex + 0.2, ey + H - 0.3), (ex + w - 0.2, ey + H - 0.3), dxfattribs={"layer": "DOOR"})
+    T(msp, "H-1 기존 개구부 헤더 (EOR 확인)", ex + 0.55, ey + H - 0.52, 0.115, "DOOR")
+    T(msp, "기존 fascia + head flashing", ex + 0.55, ey + H + 0.18, 0.115, "NOTE")
+
+    msp.add_lwpolyline([(ex + 0.55, ey), (ex + 1.46, ey), (ex + 1.46, ey + 2.03),
+                        (ex + 0.55, ey + 2.03)], close=True, dxfattribs={"layer": "DOOR"})
+    T(msp, "D-1 3'-0\"x6'-8\"", ex + 0.5, ey - 0.5, 0.11, "DOOR")
+    msp.add_lwpolyline([(ex + 2.5, ey + 0.95), (ex + 4.02, ey + 0.95), (ex + 4.02, ey + 2.17),
+                        (ex + 2.5, ey + 2.17)], close=True, dxfattribs={"layer": "WINDOW"})
+    T(msp, "WD-1 5'-0\"x4'-0\" (sill 3'-4\")", ex + 2.45, ey - 0.5, 0.11, "WINDOW")
+
+    msp.add_line((ex, ey - 0.78), (ex + w, ey - 0.78), dxfattribs={"layer": "DIM"})
+    T(msp, f"{CP.get('width_ft', 20.0):.0f}'-0\" (가정)", ex + w / 2 - 0.5, ey - 0.74, 0.11, "DIM")
+    msp.add_line((ex + w + 0.42, ey), (ex + w + 0.42, ey + H), dxfattribs={"layer": "DIM"})
+    T(msp, f"{CP.get('wall_h_ft', 8.0):.0f}'-0\"", ex + w + 0.5, ey + H / 2, 0.11, "DIM")
+
+    # ---------------- 수직 단면 (좌하)
+    sx, sy = 0.9, 3.4
+    T(msp, "수직 단면 (벽체 · 슬래브 단부 · 신규 기초) 1:20 개념", sx, sy + 4.55, 0.17, "TITLE")
+    msp.add_line((sx - 0.3, sy), (sx + 5.0, sy), dxfattribs={"layer": "WALL-EXT"})
+    msp.add_lwpolyline([(sx - 0.3, sy), (sx + 2.0, sy), (sx + 2.0, sy + 0.45), (sx - 0.3, sy + 0.45)],
+                       close=True, dxfattribs={"layer": "WALL-EXIST"})
+    T(msp, "기존 카포트 슬래브 (비단열 · conditioned 기초 아님)", sx - 0.28, sy - 0.32, 0.105, "NOTE")
+    msp.add_lwpolyline([(sx + 2.0, sy - 0.7), (sx + 2.7, sy - 0.7), (sx + 2.7, sy + 0.45),
+                        (sx + 2.0, sy + 0.45)], close=True, dxfattribs={"layer": "WALL-INT"})
+    T(msp, "F-1 신규 테두리 기초", sx + 0.85, sy - 0.92, 0.105, "WALL-INT")
+    msp.add_lwpolyline([(sx + 2.0, sy + 0.45), (sx + 2.35, sy + 0.45), (sx + 2.35, sy + 3.0),
+                        (sx + 2.0, sy + 3.0)], close=True, dxfattribs={"layer": "WALL-EXT"})
+    T(msp, "신규 외벽: siding + WRB + OSB + 2x6 R-21 + GWB", sx + 2.55, sy + 1.72, 0.105, "TEXT")
+    T(msp, "PL-1 상부 플레이트", sx + 2.55, sy + 3.18, 0.105, "DOOR")
+    msp.add_lwpolyline([(sx + 2.0, sy + 3.05), (sx + 2.35, sy + 3.05), (sx + 2.35, sy + 3.35),
+                        (sx + 2.0, sy + 3.35)], close=True, dxfattribs={"layer": "DOOR"})
+    # 기존 지붕 / fascia
+    msp.add_line((sx + 2.0, sy + 3.45), (sx - 0.3, sy + 3.85), dxfattribs={"layer": "WALL-EXIST"})
+    msp.add_line((sx + 2.0, sy + 3.6), (sx - 0.3, sy + 4.0), dxfattribs={"layer": "WALL-EXIST"})
+    T(msp, "기존 지붕 / fascia (유지)", sx - 0.28, sy + 4.02, 0.105, "WALL-EXIST")
+    msp.add_lwpolyline([(sx + 1.95, sy + 3.47), (sx + 2.05, sy + 3.4), (sx + 2.35, sy + 3.44),
+                        (sx + 2.35, sy + 3.35)], close=True, dxfattribs={"layer": "NOTE"})
+    T(msp, "FL-1 head / tie-in 플래싱 + 역물매 차단", sx + 2.55, sy + 3.72, 0.105, "NOTE")
+    # 내부 바닥 조립
+    msp.add_lwpolyline([(sx - 0.3, sy + 0.45), (sx + 2.0, sy + 0.45), (sx + 2.0, sy + 0.62),
+                        (sx - 0.3, sy + 0.62)], close=True, dxfattribs={"layer": "ROOM"})
+    T(msp, "SL-1 단열 슬래브(상부 R-10) + 마감 / 올린 마루", sx - 0.28, sy + 1.05, 0.105, "TEXT")
+    T(msp, "D-1 문턱: 외부 지표 +4in 이상 (또는 배수 턱)", sx - 0.28, sy + 1.42, 0.105, "NOTE")
+    msp.add_line((sx + 2.75, sy + 0.25), (sx + 3.6, sy + 0.05), dxfattribs={"layer": "DIM"})
+    T(msp, "슬래브 단부 배수 2% · 집수구 · 지표수 역류 차단", sx + 2.75, sy - 0.2, 0.1, "DIM")
+
+    # ---------------- 주기 (우상)
+    note(msp, [
+        "1. 기존 오픈 페이스를 신규 외벽으로 폐쇄한다. 기존 지붕은 유지하고 개구부 상부 헤더 H-1 과",
+        "   기둥 P-1/P-2 로 지지한다 (기존 부재 상태 확인 후 유지 또는 보강 - EOR 판단).",
+        "2. " + CP.get("flashing", ""),
+        "3. " + CP.get("drainage", ""),
+        "4. " + CP.get("slab_note", ""),
+        "5. 벽체: 2x6 R-21 + 외장 단열 검토(WSEC) · WRB 연속 · sill seal · 관통부 실란트.",
+        "6. D-1 은 단열 외부문, WD-1 은 침실이 아니므로 이그레스 요건 비적용.",
+    ], x=10.6, y=13.8, step=0.44, h=0.115)
+
+    # ---------------- 조립 표 2종
+    T(msp, "신규 외벽 조립 (외 → 내)", 10.6, 10.45, 0.16, "TITLE")
+    table(msp, [("층", "재료", "비고"),
+                ("1", "steel siding", "기존과 동일"),
+                ("2", "WRB + 플래싱", "연속"),
+                ("3", "7/16 OSB", "구조 패널"),
+                ("4", "2x6 stud R-21", "@16 o.c."),
+                ("5", "1/2 GWB", "-")],
+          x=10.6, y=10.18, cols=[0.0, 1.2, 3.6], step=0.3, h=0.1)
+
+    T(msp, "바닥 조립 (기존 슬래브 위)", 15.6, 10.45, 0.16, "TITLE")
+    table(msp, [("층", "재료", "비고"),
+                ("1", "기존 슬래브", "비단열"),
+                ("2", "방습층", "-"),
+                ("3", "R-10 rigid", "주변부"),
+                ("4", "sleeper/마감", "또는 올린 마루")],
+          x=15.6, y=10.18, cols=[0.0, 1.3, 3.4], step=0.3, h=0.1)
+
+    T(msp, "시공 순서: ① 기초·피어 → ② 개구부 헤더/기둥 확인 → ③ 외벽 골조 → ④ 지붕·플래싱 → ⑤ 단열·기밀 → ⑥ 마감·창호",
+      10.6, 8.1, 0.115, "NOTE")
+    T(msp, "※ 예비 개념도이며 구조·에너지 적합성은 EOR/분석가 확인이 필요하다.", 10.6, 7.8, 0.11, "NOTE")
+    doc.saveas(path); return path
+
+
 def a18_garage_detail(path):
+    # 카포트 외벽화 프로젝트는 개구부 폐쇄 상세로 대체된다 (META 플래그)
+    if META.get("carport_enclosure"):
+        return a18_carport_opening(path)
     doc = new_doc(); msp = doc.modelspace()
     sheet_frame(msp, "A-18", "차고도어 스킨월 상세")
     x0, y0 = 0.8, 4.0
@@ -541,7 +652,7 @@ def main():
         a15_wall_detail(os.path.join(OUT, "A-15_외벽상세.dxf")),
         a16_bath_detail(os.path.join(OUT, "A-16_욕실상세.dxf")),
         a17_roof_detail(os.path.join(OUT, "A-17_지붕상세.dxf")),
-        a18_garage_detail(os.path.join(OUT, "A-18_차고도어상세.dxf")),
+        a18_garage_detail(os.path.join(OUT, "A-18_%s.dxf" % design.META.get("a18_slug", "차고도어상세"))),
         e02_lighting(os.path.join(OUT, "E-02_조명평면.dxf")),
         e03_power(os.path.join(OUT, "E-03_동력결선.dxf")),
         p03_supply_diagram(os.path.join(OUT, "P-03_급수계통도.dxf")),
