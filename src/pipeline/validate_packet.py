@@ -25,7 +25,7 @@ OUT = os.environ.get("HOUSEBIM_OUT", os.path.join(DESIGN_DIR, "out"))
 PDFINFO = "/Users/henryoh/.aside/runtime/bin/pdfinfo"
 
 EXPECTED = [
-    "G-00_표지", "G-01", "G-02", "G-03", "G-04", "G-05", "G-06", "C-01",
+    "G-00_표지", "G-01", "G-02", "G-03", "G-04", "G-05", "G-06", "G-07", "C-01",
     "A-01", "A-02", "A-03", "A-04", "A-05", "A-06", "A-07", "A-08",
     "A-09", "A-10", "A-11", "A-12", "A-13", "A-14", "A-15", "A-16", "A-17", "A-18",
     "S-01_구조", "S-02", "S-03",
@@ -33,8 +33,8 @@ EXPECTED = [
     "P-02", "P-03", "P-04", "LS-01", "LS-02", "EN-01", "EN-02", "EN-03",
 ]
 
-# 카포트 외벽화 범위(META['carport_enclosure']) 프로젝트는 S-04 / A-19 를 추가해 45장.
-# 다른 프로젝트(3571 등)는 43장 기본 세트를 그대로 쓴다.
+# 카포트 외벽화 범위(META['carport_enclosure']) 프로젝트는 S-04 / A-19 를 추가해 46장.
+# 다른 프로젝트(3571 등)는 44장 기본 세트(G-07 실측 근거 포함)를 그대로 쓴다.
 try:
     _d = __import__("design")
     if getattr(_d, "META", {}).get("carport_enclosure"):

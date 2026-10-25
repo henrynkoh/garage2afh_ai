@@ -1,14 +1,17 @@
 """
-3571 Cassie - 허가 제출 패킷 시트 4장.
+3571 Cassie - 허가 제출 패킷 시트 5장.
 
   G-03 부동산/건물 정보 (Zillow·공적 기록 기반)
   G-04 허가 신청 데이터 시트 (City of Tumwater 양식 항목)
   G-05 제출 체크리스트 (항목 → 시트 매핑)
+  G-06 조정(Discrepancy) 로그
+  G-07 실측 근거 (intake/ 사진·영상·전사 치수 → measurements.json / evidence.json)
   EN-03 WSEC 외피 성능 요약 (제출용 표)
 
 모두 예비 문서이며, 서명·날인 전에는 제출본이 아니다.
 """
 
+import json
 import os
 import sys
 
@@ -217,12 +220,112 @@ def g06_coordination(path):
     doc.saveas(path); return path
 
 
+def _short(s, n):
+    s = " ".join(str(s).split())
+    return s if len(s) <= n else s[:n - 1] + "…"
+
+
+def g07_measurement(path):
+    """G-07 실측 근거 - intake/ 의 파싱 결과와 증거 파일 해시를 한 장에 모은다.
+
+    intake/ 가 없으면 '실측 자료 없음 (설계 기준값 사용)' 을 찍고 설계 기준 행으로 채운다.
+    이 시트는 게이트가 아니다: 자료가 없어도 빌드는 계속된다.
+    """
+    doc = new_doc(); msp = doc.modelspace()
+    sheet_frame(msp, "G-07", "실측 근거 (measurement basis)")
+    mpath = os.path.join(DESIGN_DIR, "intake", "measurements.json")
+    epath = os.path.join(DESIGN_DIR, "intake", "evidence.json")
+    meas = ev = None
+    try:
+        meas = json.load(open(mpath, encoding="utf-8")) if os.path.isfile(mpath) else None
+    except Exception:
+        meas = None
+    try:
+        ev = json.load(open(epath, encoding="utf-8")) if os.path.isfile(epath) else None
+    except Exception:
+        ev = None
+    rooms = (meas or {}).get("rooms") or []
+    files = (ev or {}).get("files") or []
+    h8 = {f.get("file"): str(f.get("sha256", ""))[:8] for f in files}
+
+    cols = [0.0, 4.2, 9.6, 15.0]
+    rows = [("항목", "값", "출처 (파일명·라인·해시 앞 8자)", "비고")]
+    if not rooms and not files:
+        T(msp, "실측 자료 없음 (설계 기준값 사용)", 0.8, 12.2, 0.26, "TITLE")
+        rows += [
+            ("기존 차고 (설계 기준)", "%d SF" % META.get("existing_garage_sf", 0), "design.py META", "실측 대체"),
+            ("거주 내부 목표", "%d SF" % META.get("internal_sf", 0), "design.py META", "실측 대체"),
+            ("프로그램", "침실 %d + 욕실 %d · 실 %d개" % (base.bed_count(),
+                sum(1 for r in design.ROOMS if r.get("kind") == "bath"), len(design.ROOMS)),
+             "design.py ROOMS", "실측 아님"),
+            ("천장고", META.get("existing_ceiling", "-"), "설계 기준 (실측 필요)", "C20 WARN 근거"),
+            ("intake/", "없음", "%s/intake" % os.path.basename(DESIGN_DIR), "사진·영상·전사 미첨부"),
+        ]
+        table(msp, rows, x=0.8, y=11.4, cols=cols, step=0.42, h=0.13)
+        note(msp, [
+            "1. 이 프로젝트는 실측 자료 없이 공적 기록(카운티 assessor)과 설계 기준값으로 작성되었다.",
+            "2. 실측이 들어오면 intake/ 에 사진·영상·전사 텍스트를 넣고 `g2a.py intake <id>` 를 실행한다.",
+            "   -> intake/measurements.json · evidence.json · design_rooms.py 가 생성되고 이 시트가 채워진다.",
+            "3. 실측 전까지 이 세트의 치수는 '설계 기준값' 이며, 시공 전 현장 확인 대상이다.",
+        ], y=8.4, step=0.46)
+        doc.saveas(path); return path
+
+    for r in rooms[:12]:
+        src = str(r.get("source", ""))
+        fname = src.split(":")[0]
+        rows.append((
+            "실측 · " + _short(r.get("room", "-"), 16),
+            "%.2f x %.2f m · %.1f m2" % (r.get("w_m", 0), r.get("d_m", 0), r.get("area_m2", 0)),
+            _short(src, 20) + (" · " + h8[fname] if h8.get(fname) else ""),
+            _short(r.get("raw", ""), 26),
+        ))
+    for f in files[:10]:
+        k = f.get("kind")
+        if k == "photo":
+            val = "%sx%s px · %s B" % (f.get("width_px") or "?", f.get("height_px") or "?",
+                                       format(f.get("bytes", 0), ","))
+            note_txt = "현장 사진 (치수 미포함)"
+        elif k == "video":
+            val = "%s B · 전사는 별도" % format(f.get("bytes", 0), ",")
+            note_txt = "실측 영상 (증거)"
+        else:
+            val = "%s B · 텍스트" % format(f.get("bytes", 0), ",")
+            note_txt = "음성 전사 원문"
+        rows.append(("증거 · " + _short(f.get("file", "-"), 16), val,
+                     _short(f.get("file", "-"), 20) + " · " + str(f.get("sha256", ""))[:8], note_txt))
+    extra = len(rooms) + len(files) - (min(len(rooms), 12) + min(len(files), 10))
+    if extra > 0:
+        rows.append(("…", "행 %d개 더" % extra, "measurements.json / evidence.json", "전체는 JSON 참조"))
+
+    plate = (meas or {}).get("plate") or {}
+    y_after = 12.7 - 0.34 * len(rows)
+    table(msp, rows, x=0.8, y=12.7, cols=cols, step=0.34, h=0.12)
+    lines = []
+    if plate:
+        lines.append("플레이트 %0.2f x %0.2f m = %0.1f m2 (%0.0f SF) · 종횡비 %0.2f · basis=%s"
+                     % (plate.get("w_m", 0), plate.get("d_m", 0), plate.get("area_m2", 0),
+                        plate.get("area_sf", 0), plate.get("aspect", 0), plate.get("basis", "-")))
+    lines += [
+        "1. 치수는 운영자가 음성으로 말한 실측을 전사한 텍스트에서 파싱한 값이다 (전사 = 앱 외부 단계).",
+        "2. 영상 파일은 해시로 출처만 고정한다. 앱은 영상을 해석하지 않는다.",
+        "3. 각 행의 해시 앞 8자는 intake/evidence.json 의 sha256 이며, 파일이 바뀌면 값도 바뀐다.",
+        "4. 실측값과 설계 기준값이 다르면 G-06 조정 로그에 적고, 도면은 실측을 따른다.",
+    ]
+    warm = (meas or {}).get("warnings") or []
+    if warm:
+        lines.append("5. 파싱 경고 %d건: %s" % (len(warm), _short("; ".join(
+            "%s %s" % (w.get("source", "?"), w.get("reason", "")) for w in warm[:3]), 56)))
+    note(msp, wrap_notes(lines, 96, "   "), y=min(6.4, y_after - 0.5), step=0.42)
+    doc.saveas(path); return path
+
+
 def main():
     for p in [
         g03_property(os.path.join(OUT, "G-03_부동산정보.dxf")),
         g04_application(os.path.join(OUT, "G-04_신청데이터.dxf")),
         g05_checklist(os.path.join(OUT, "G-05_제출체크리스트.dxf")),
         g06_coordination(os.path.join(OUT, "G-06_조정로그.dxf")),
+        g07_measurement(os.path.join(OUT, "G-07_실측근거.dxf")),
         en03_wsec(os.path.join(OUT, "EN-03_WSEC요약.dxf")),
     ]:
         print("saved", os.path.basename(p))
