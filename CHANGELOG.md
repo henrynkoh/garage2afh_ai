@@ -3,6 +3,102 @@
 All notable pipeline changes. Dates are the day the change was rebuilt and verified on
 real projects (3571 Cassie Dr SW, 7504 32nd Ave SE, 1713 Winterwood Dr).
 
+## 0.4.0 — 2026-10-24 — sheet text derives from the program (G-01 spacing, egress count, S-01 label)
+
+Three defects found while building 7021 Southwick Ct SW. All three are the same class: a sheet
+string that was correct for the 3571 Cassie reference program was written as a literal, so every
+smaller or larger program printed a sentence that did not describe it.
+
+### 1. G-01 note spacing was fixed at 0.62 and the notes ran through the footer
+
+`g01_general_notes` placed the note lines with `step=0.62` from `y=12.8` regardless of how many
+lines the wrapped block produced. The 11 notes of 3571 fit; on 7021 the `structure_note` alone
+wrapped to 15 lines and the block crossed the footer line `이 도면 세트는 예비 검토용입니다.`
+at `y=5.4` — while `text_bbox.py` still passed, because a text block overlapping another text
+block stays inside the frame. Text-on-text is invisible to a frame gate.
+
+```
+_lines = wrap_notes(lines, 74, "    ")
+_step  = min(0.62, (12.8 - 6.0) / max(len(_lines), 1))   # 12.8 top → 6.0 hard floor
+note(msp, _lines, x=0.8, y=12.8, step=_step, h=0.19)
+```
+
+The step now shrinks with the line count and never drops below the footer (11 wrapped lines →
+0.618, 15 → 0.453). Measured on the two rebuilt projects: 133 11 note lines, every consecutive
+baseline gap 0.618, last note 1.218 above the footer; 3515 12 lines, gap 0.567, last note 1.167
+above the footer, against a 0.19 text height and a 0.22 footer height.
+
+### 2. G-01 / LS-02 printed `침실 3개소` on 2-bedroom projects
+
+Both egress sentences were literals (`"6. 이그레스: 침실 3개소 ..."` on G-01, `"1. 침실 3개소 ..."`
+on LS-02). A new helper reads the program instead:
+
+```
+def _beds():
+    """design.ROOMS 의 bedroom 실 수"""
+    return sum(1 for r in design.ROOMS if r.get("kind") == "bedroom")
+```
+
+`A-08` had the same problem one level down: it built `[(침실A …), (침실B …), (침실C …)]` and
+looked each room up by name, so a 2-bedroom program raised `StopIteration`. It now iterates the
+bedroom rooms from `design.ROOMS` and cycles a bed-size table, so bed count follows the program.
+
+### 3. S-01 schedule row said `침실C/복도` on a 2-bedroom program
+
+The header row is the wall the header actually lands in. It is now read off `design.WALLS`:
+
+| project | before | after (this rebuild) |
+|---|---|---|
+| 133-jalyn-st (2 bed) | 침실C/복도 (literal) | `W05 침실A·B/복도` |
+| 3515-hawthorne-pl (2 bed) | 침실C/복도 (literal) | `W05 침실A·B/복도` |
+
+`_door_wall_label()` walks `design.WALLS` and returns the first non-exterior wall whose name
+contains `침실` (falling back to `내벽/복도`), so the row names the wall that actually carries the
+header instead of a bedroom letter that may not exist.
+
+`META = design.META` in `sheets_permit2.py` had also been left as `META = design.METAMETA =
+design.META` by an earlier in-place edit; restored to the plain assignment (byte-identical sheets
+before and after — all 43 SVGs unchanged).
+
+### Stale text impact: 3515 Hawthorne Pl already shipped with a wrong egress count
+
+3515 is a 2-bedroom program (440 SF attached garage, plate 22'-0" × 20'-0", egress windows WD01
+침실A / WD02 침실B) and its master package was generated under 0.3.0, so `G-01` item 6 and `LS-02`
+item 1 read `침실 3개소` — a package that tells the AHJ there are three egress windows where the
+set draws two. 133 Jalyn St (528 SF detached garage, also 2 bedrooms) carried the same sentence.
+A stale-text defect survives every gate this pipeline has: `audit_3571.py` checks the model, not
+the prose, and `text_bbox.py` only measures against the frame, so the only detector is reading
+the rendered PDF. Both projects were rebuilt and re-rendered for this version.
+
+### Also in this push (found on the same rebuild pass)
+
+- `sheets_v2.ftin` carries a rounded 12 inches into the next foot (`21'-12"` → `22'-0"`).
+- `sheets_packet.g04_application` takes META-driven extra rows and footnotes (`g04_extra`,
+  `g04_footnote`) and shrinks the row step to keep them inside the frame; the G-04 title is
+  `허가 신청 데이터 - {jurisdiction}` instead of a parenthesised city.
+- `sheets_packet.g06_coordination` shrinks the discrepancy-table step so a long log stops short
+  of the note block at `y=7.6`.
+- `validate_packet.py` picks the drawing-set PDF by name when the `도면세트` convention is used,
+  otherwise by page count, so projects with address-named PDFs validate too.
+
+### Rebuilt and re-verified (this version)
+
+| project | program | sheets | audit | validator | master | A3 only | blank/dark @18dpi | egress sentence | `침실 3개소` | G-01 overlap |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 133-jalyn-st | 2 bed / 528 SF detached | 43 | 74/74 (C20 WARN) | 7/7 | 47 p | yes | 0 / 0 | `침실 2개소` | 0 | 0 pairs |
+| 3515-hawthorne-pl | 2 bed / 440 SF attached | 43 | 74/74 (C20 WARN) | 7/7 | 47 p | yes | 0 / 0 | `침실 2개소` | 0 | 0 pairs |
+
+Overlap measured with ezdxf: every `TEXT` inside the 0..21.0 × 0..14.85 frame, pairwise bbox
+intersection on both axes → 0 pairs; per-column consecutive baseline gaps ≥ the smaller text
+height (worst ratio 2.98× the required minimum).
+
+### Known residual (not fixed here)
+
+`sheets_permit2.sheet_life_safety` (LS-01 연기·CO) still writes `이그레스 창: 침실A/B/C …` as a
+literal, so both 2-bedroom projects say A/B/C on a two-bedroom plan. It is the same class as the
+three fixes above and needs a `_beds()`-style label; it is not in this version because fixing it
+means rebuilding every project again.
+
 ## 0.3.0 — 2026-10-24 — program-aware audit (checks derive from design.py)
 
 ### The defect
