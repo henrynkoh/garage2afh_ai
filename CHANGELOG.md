@@ -1,5 +1,79 @@
 # Changelog
 
+## 0.6.0 — 2026-10-25 — intake stage (`g2a.py intake`), evidence sheet G-07, 44 sheets
+
+### What changed
+
+The pipeline started every address from a template `design.py`. It now has a first stage that
+starts from what an operator actually has on site: the walk-through video, the photos taken with
+it, and the dimensions spoken into that video once they are transcribed to text. This is the
+workflow of the video *실측 영상을 챗GPT에 넣었더니… 도면과 3D까지* (뽁숑이의 AI 스케치업,
+`0EX2GDVJGB4`): measurement footage + a spoken description in, plans out.
+
+| Piece | Detail |
+|---|---|
+| `src/pipeline/intake.py` (new) | reads `projects/<id>/intake/`, writes `measurements.json`, `evidence.json`, `design_rooms.py`; exit 1 when no line parses |
+| `sheets_packet.py` | new `g07_measurement()` → `G-07_실측근거.dxf`, one row per parsed measurement and per evidence file |
+| `validate_packet.py` | `G-07` added to `EXPECTED` (standard 44, carport branch 46) |
+| `g2a.py` | `intake` subcommand; needs no `design.py`, so footage can be processed the day it arrives |
+| sheet count | **43 → 44** (standard), **45 → 46** (carport branch): `G-07` sits right after `G-06` |
+
+### Accepted dimension lines
+
+```
+침실A 12'-10" x 9'-7"     피트-인치
+침실B 12'10" x 9'7"       피트-인치 (구분자 없음)
+수납 8' x 5'              피트만
+욕실 3.6m x 2.4m          미터
+거실 3600 x 2400 mm       밀리미터 (줄 끝 단위)
+주방 360 x 240 cm         센티미터
+Bedroom A 12'10" x 9'7"   영어 실 이름
+```
+
+Output rows are `{room, w_m, d_m, area_m2, source:"notes.txt:3", raw, unit}`; the plate is the
+declared footprint from `META`/`meta.json` when present, otherwise the room-area sum plus 12 %
+circulation in a rectangle with aspect 1.0–1.6. A line with no unit (`차고 12 x 9`) or half a
+pair (`복도 11'-2" x ?`) is reported as a warning, never guessed.
+
+**Transcription stays outside the app.** The video is only hashed as evidence; the spoken numbers
+arrive as `transcript.txt`/`notes.txt`. `evidence.json` records `file`, `kind`, `bytes`, `sha256`
+and, for images, `width_px`/`height_px` through PIL.
+
+### Measured on the rebuilt projects
+
+`projects/_intake-selftest` (synthetic fixture, 6 good lines + 2 bad, 2 placeholder PNGs, no video):
+
+| Quantity | Result |
+|---|---|
+| parsed | 6 rooms, 52.488 m² / 565 SF |
+| plate | 9.05 × 6.50 m = 58.83 m² (633 SF), aspect 1.39, `basis=room-sum` |
+| warnings | 2 — `notes.txt:9` 치수 쌍이 아님, `notes.txt:10` 단위 불명 |
+| exit code | 0 |
+
+`projects/3515-hawthorne-pl` (real, no `intake/` folder, so the empty path is exercised):
+
+| Gate | Before | After |
+|---|---|---|
+| DXF / SVG | 43 / 43 | **44 / 44** |
+| audit | 74/74 | **74/74** |
+| validator | 7/7 | **7/7** (시트 44장 · PDF 44쪽) |
+| master PDF | 47 pages | **48 pages** |
+| page size | A3 only | A3 only, one size 1191.12 × 841.92 pt |
+| blank / dark | 0 / 0 | **0 / 0** (18 dpi pixel scan) |
+| splits | 30 / 8 / 5 | **30 / 9 / 5** |
+| text-bbox gate | rc=0 | rc=0, max x 18.924, min y −0.980 |
+| G-07 | — | page 8 of the drawing set, prints `실측 자료 없음 (설계 기준값 사용)` |
+
+The same sheet with evidence present was rendered from `_intake-selftest`'s `intake/` against the
+3515 design: 6 measurement rows (`notes.txt:3 · 36697b32`), 2 photo rows (`100x80 px · b78aa1ac`),
+1 transcript row, and the warning count on the sheet.
+
+### Known residual
+
+`design_rooms.py` tiles the plate by room area; a room whose measured aspect does not fit its tile
+is stretched to keep the area (the measured w/d stay in `MEASURED`). Wall, door and window
+positions are still hand work — the scaffold is a starting point, not a design.
+
 All notable pipeline changes. Dates are the day the change was rebuilt and verified on
 real projects (3571 Cassie Dr SW, 7504 32nd Ave SE, 1713 Winterwood Dr).
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """garage2AFH - one property in, one submission package out.
     g2a.py new "<address>" --parcel P --lot-sf N   scaffold projects/<slug>/design.py
+    g2a.py intake <slug>                           parse intake/ (photos+video+transcript) -> measurements.json
     g2a.py build <slug> [--clean]                  sheets + SVG + audit + takeoff
     g2a.py bind  <slug> [--binder PATH]            packet + index + master PDF
     g2a.py check <slug>                            validator; exit 1 on hard fail
@@ -31,6 +32,12 @@ def stage(script, d, args=(), tools=False):
     for line in (r.stdout + r.stderr).strip().splitlines()[-40:]:
         print("   " + line)
     return r.returncode
+def project_dir(name):
+    """intake 는 design.py 없이도 돌아야 한다 (실측만 먼저 들어오는 경우)."""
+    d = name if os.path.isdir(name) else os.path.join(PROJECTS, name)
+    if not os.path.isdir(d):
+        sys.exit(f"no project folder at {d} - run: g2a.py new \"<address>\" --parcel P --lot-sf N")
+    return d
 def resolve(name):
     d = name if os.path.isdir(name) else os.path.join(PROJECTS, name)  # slug or explicit path
     if not os.path.isfile(os.path.join(d, "design.py")):
@@ -52,6 +59,10 @@ def cmd_new(a):
                "lot_sf": a.lot_sf}, open(os.path.join(d, "meta.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     print(f"[new] {p}\n      project={a.address!r} city={city!r} parcel={a.parcel} lot_sf={a.lot_sf}"
           f"\n      next: edit META + WALLS/ROOMS, then g2a.py build {slug}")
+def cmd_intake(a):
+    d = project_dir(a.slug)
+    print(f"[intake] {os.path.join(d, 'intake')}")
+    return stage("intake.py", d)   # rc=1 when not a single measurement line parsed
 def cmd_build(a):
     d = resolve(a.slug); out, rc = env_for(d)[1], 0
     if a.clean:
@@ -111,11 +122,13 @@ if __name__ == "__main__":
     n.add_argument("address"); n.add_argument("--parcel", required=True); n.add_argument("--lot-sf", type=int, default=0)
     n.add_argument("--lot"); n.add_argument("--tax-id"); n.add_argument("--city"); n.add_argument("--slug")
     n.add_argument("--force", action="store_true", help="overwrite an existing project")
-    for name, h in (("build", "sheets, SVG, audit, takeoff"), ("bind", "packet + index + PDF"),
+    for name, h in (("intake", "parse intake/ measurements + evidence"),
+                    ("build", "sheets, SVG, audit, takeoff"), ("bind", "packet + index + PDF"),
                     ("check", "validate; exit 1 on hard fail")):
         sp.add_parser(name, help=h).add_argument("slug")
     sp.choices["build"].add_argument("--clean", action="store_true", help="delete stale dxf/svg/pdf first")
     sp.choices["bind"].add_argument("--binder", help="path to the project bind_master.py")
     sp.add_parser("status", help="state of one or all projects").add_argument("slug", nargs="?")
     a = ap.parse_args()
-    sys.exit({"new": cmd_new, "build": cmd_build, "bind": cmd_bind, "check": cmd_check, "status": cmd_status}[a.cmd](a) or 0)
+    sys.exit({"new": cmd_new, "intake": cmd_intake, "build": cmd_build, "bind": cmd_bind,
+              "check": cmd_check, "status": cmd_status}[a.cmd](a) or 0)

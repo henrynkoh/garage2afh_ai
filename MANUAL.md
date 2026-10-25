@@ -78,6 +78,74 @@ Expected output:
 It writes `projects/<slug>/design.py` (template copy with META rewritten) and
 `projects/<slug>/meta.json`. It does **not** create `out/` — `build` does.
 
+### `g2a.py intake`
+
+```bash
+python3 g2a.py intake <slug>
+```
+
+Reads `projects/<slug>/intake/` and turns what the operator actually has on site into the
+numbers the pipeline needs. It runs **before** `build` and does not need `design.py`.
+
+| Put in `intake/` | What it is |
+|---|---|
+| `*.jpg`, `*.jpeg`, `*.png`, `*.heic` | site photos (hashed, never interpreted) |
+| `*.mp4`, `*.mov` | measurement video (hashed, **never interpreted**) |
+| `notes.txt`, `transcript.txt` | the spoken measurements, already transcribed to text |
+| `measurements.json` | optional; rows a human typed, kept ahead of the transcript |
+
+**Transcription is an operator/AI step outside this app.** Record the walk-through, transcribe
+the audio somewhere else (phone dictation, a speech model), and paste the result into
+`transcript.txt`. The app parses that text and hashes the video as evidence only.
+
+Accepted dimension lines (one room per line, Korean or English room names):
+
+```
+침실A 12'-10" x 9'-7"        피트-인치
+침실B 12'10" x 9'7"          피트-인치, 구분자 없음
+수납 8' x 5'                 피트만
+욕실 3.6m x 2.4m             미터
+거실 3600 x 2400 mm          밀리미터 (단위가 줄 끝에 한 번)
+주방 360 x 240 cm            센티미터
+Bedroom A 12'10" x 9'7"      영어 실 이름
+```
+
+A blank line or a `#` comment closes a block; if the file holds several measurement blocks
+(first pass, second pass) the largest one by floor area is used and the rest are listed as
+alternatives. Lines that cannot be parsed are reported, never guessed.
+
+Writes three files:
+
+| File | Contents |
+|---|---|
+| `intake/measurements.json` | `rooms:[{room, w_m, d_m, area_m2, source:"notes.txt:3"}]`, `plate`, `warnings`, `sets` |
+| `intake/evidence.json` | one row per photo/video/text: `file`, `kind`, `bytes`, `sha256`, and `width_px`/`height_px` for images |
+| `intake/design_rooms.py` | the `ROOMS` draft to paste into `design.py`, plus the measured dimensions with their source line |
+
+The plate is the declared footprint from `META`/`meta.json` when one exists (`footprint_m`,
+`plate_ft`, `garage_ft`, `garage_sf`), otherwise the room area sum plus 12 % circulation in a
+rectangle with an aspect between 1.0 and 1.6. `design_rooms.py` tiles that plate by room area
+so every room stays inside it; wall/door/window positions are left for you.
+
+Expected output (real run, `projects/_intake-selftest`, 6 lines + 2 bad lines):
+
+```
+[intake] /path/projects/_intake-selftest/intake
+[intake] rc=0
+   실측 인테이크 · _intake-selftest · 2026-10-25 00:29
+   #    실(room)                    가로m     세로m      면적m2     면적SF  출처
+   1    침실A                      3.912   2.921    11.426    123.0  notes.txt:3
+   ...
+   합계 6실                                          52.488    565.0
+   플레이트 9.05 x 6.50 m = 58.83 m2 (633 SF) · 종횡비 1.39 · basis=room-sum
+   경고 2건:
+     - notes.txt:9  치수 쌍이 아님 (W x D 형식 필요) :: 복도 11'-2" x ?
+     - notes.txt:10  단위 불명 (예: 12 x 9 - ft/m 표기 필요) :: 차고 12 x 9
+```
+
+Exit codes: **0** at least one measurement line parsed, **1** nothing parsed (evidence is still
+written). The parsed dimensions land on sheet `G-07 실측 근거` at the next `build`.
+
 ### `g2a.py build`
 
 ```bash
@@ -95,9 +163,9 @@ Runs, in order, each as its own process:
 | 1 | `sheets_v2.py` | `G-00`, `A-01`, `A-02`, `A-03`, `A-04`, `M-01` |
 | 2 | `sheets_permit2.py` | `LS-01`, `M-02`, `E-01`, `P-02`, `S-01`, `EN-01` |
 | 3 | `sheets_3571_full.py` | `G-01`, `G-02`, `S-02`, `S-03`, `A-05`…`A-18` (14), `E-02`, `E-03`, `P-03`, `P-04`, `M-03`, `LS-02`, `EN-02` (25 sheets) |
-| 4 | `sheets_packet.py` | `G-03`, `G-04`, `G-05`, `G-06`, `EN-03` |
+| 4 | `sheets_packet.py` | `G-03`, `G-04`, `G-05`, `G-06`, `G-07`, `EN-03` |
 | 5 | `sheets_site.py` | `C-01` |
-| 6 | `tools/dxf_to_svg.py <out>` | one `.svg` per `.dxf` (43 of each) |
+| 6 | `tools/dxf_to_svg.py <out>` | one `.svg` per `.dxf` (44 of each) |
 | 7 | `audit_3571.py` | `checks_3571.json`, `자재목록.csv`, `자재목록.md`, `report_full.html` |
 
 Expected output (abridged):
@@ -111,7 +179,7 @@ Expected output (abridged):
    checks 74/74
    materials 27 -> 자재목록.csv 자재목록.md
    report -> report_full.html
-[build] done · dxf=43 svg=43
+[build] done · dxf=44 svg=44
 ```
 
 A non-zero `rc=` on any stage is a gate failure, even when later stages still print `rc=0`:
@@ -123,7 +191,7 @@ A non-zero `rc=` on any stage is a gate failure, even when later stages still pr
 python3 g2a.py bind <slug> [--binder path/to/bind_master.py]
 ```
 
-Refreshes the packet/application sheets (`G-03`…`G-06`, `EN-03`), regenerates every SVG (the
+Refreshes the packet/application sheets (`G-03`…`G-07`, `EN-03`), regenerates every SVG (the
 appendix index page links to them), then runs the project's binder to assemble the master PDF.
 
 Binder discovery order: `--binder`, then `HOUSEBIM_BIND`, then `projects/<slug>/bind_master.py`,
@@ -153,10 +221,10 @@ Expected output:
 
 ```
 [validate_packet] rc=0
-   [PASS] 필수 시트 존재 :: 43장 / 기대 43장
+   [PASS] 필수 시트 존재 :: 44장 / 기대 44장
    [PASS] 사람이 채울 공란 식별 :: G-04_신청데이터: (LIC#,(건축주,(성명
    [PASS] 자동검사 74/74 :: 74/74
-   [PASS] PDF 페이지 = 시트 수 :: PDF 43쪽 / 시트 43장
+   [PASS] PDF 페이지 = 시트 수 :: PDF 44쪽 / 시트 44장
    [PASS] 면적표 산출값 존재 :: A-12 값 3개
    [PASS] G-03 수치(카운티) 반영 :: 9,411 / Tax-ID / Concrete
    [PASS] C-01 수치(측량) 반영 :: 9,357 SF / 37.6%
@@ -164,7 +232,7 @@ Expected output:
 ```
 
 The rule is equality, not "at least": the PDF at `out/pdf/<slug>-도면세트.pdf` must have exactly
-as many pages as there are sheets on disk. A 71-page master package (43 sheets + 28 appendix
+as many pages as there are sheets on disk. A 72-page master package (44 sheets + 28 appendix
 pages) fails this gate until the binder and the validator agree on what "the sheet set" means
 (see §5, failure 2).
 
@@ -177,7 +245,7 @@ python3 g2a.py status [slug]
 One row per project (all projects when `slug` is omitted):
 
 ```
-3571-cassie-drive-sw          dxf=43  svg=43  audit=74/74 validate=7/7 pdf=43
+3571-cassie-drive-sw          dxf=44  svg=44  audit=74/74 validate=7/7 pdf=44
 ```
 
 Read it left to right: sheets exist, previews exist, audit is complete, validator is complete,
@@ -193,14 +261,16 @@ src/pipeline/
   sheets_v2.py             core architectural sheets, and the shared drawing library
   sheets_permit2.py        life safety, mechanical, electrical, plumbing, structural, energy
   sheets_3571_full.py      the remaining A/E/P/M/S/EN detail sheets
-  sheets_packet.py         application packet: property info, application data, checklist, log
+  sheets_packet.py         application packet: property info, application data, checklist, log, intake evidence
   sheets_site.py           site and parking plan
+  intake.py                measurement intake: dims -> measurements.json, evidence.json, design_rooms.py
   audit_3571.py            74 automated checks + takeoff + HTML report
   validate_packet.py       submission validator (7 checks) -> validation.json
 src/tools/
   dxf_to_svg.py            DXF -> SVG previews, standard library + ezdxf only
 templates/design.py        single source of truth, placeholders for a new project
 projects/<slug>/
+  intake/                  photos + measurement video + transcribed dims (g2a.py intake reads it)
   design.py                this project's single source of truth
   meta.json                machine-readable copy of the META values (status, tooling)
   bind_master.py           optional per-project binder
@@ -220,8 +290,8 @@ judgement. Nothing outside `design.py` and `bind_master.py` should ever be edite
 
 ### Gate A — sheet register (`validate_packet.py`, check 1)
 
-Compares the expected 43 sheet codes against the `.dxf` files on disk by prefix.
-**Hard-fail:** fewer than 43 files, or a sheet with an unexpected code, or two files whose names
+Compares the expected 44 sheet codes (`G-07` included) against the `.dxf` files on disk by prefix.
+**Hard-fail:** fewer than 44 files, or a sheet with an unexpected code, or two files whose names
 both start with the same code (`A-03_면적표_일람표.dxf` and `A-03_면적표.dxf`).
 
 ### Gate B — human fields (check 2)
@@ -292,7 +362,7 @@ Fix, in order:
 
 ### Failure 2 — stale PDF
 
-Symptom: `check` reports `PDF 70쪽 / 시트 43장`, or the PDF shows yesterday's `A-03`, or the
+Symptom: `check` reports `PDF 70쪽 / 시트 44장`, or the PDF shows yesterday's `A-03`, or the
 validator passes a package that a human can see is wrong.
 
 Cause: the `.dxf`/`.svg` were rebuilt but the sheet PDF and master PDF were not; or the binder
@@ -347,7 +417,7 @@ Fix:
 
 ### Failure 5 — duplicate sheet number
 
-Symptom: validator reports 44 files for 43 expected sheets, or a reviewer sees two `A-03`s, or
+Symptom: validator reports 45 files for 44 expected sheets, or a reviewer sees two `A-03`s, or
 the index lists a sheet twice.
 
 Cause: a sheet was renamed (`S-01_표지` → `G-00_표지`) and the old file stayed in `out/`; or two
@@ -371,7 +441,7 @@ owning module. If a rename is permanent, delete the old file from the register i
 A package is done when all of these are true, in this order, and none of them is a judgement
 call:
 
-1. `g2a.py status <slug>` shows `dxf=43 svg=43 audit=74/74 validate=7/7` and a PDF page count.
+1. `g2a.py status <slug>` shows `dxf=44 svg=44 audit=74/74 validate=7/7` and a PDF page count.
 2. No `FAIL` in `validation.json` except `사람이 채울 공란 식별`.
 3. The human-field list is either empty or written into the submission email to the applicant.
 4. Every discrepancy between county and survey numbers appears on `G-06` with the chosen value.

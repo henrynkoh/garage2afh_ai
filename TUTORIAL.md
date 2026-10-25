@@ -21,6 +21,10 @@ Every command below was run on this project; every output block is copied from t
 written from memory. Machine: Apple Silicon Mac, Python 3.13 (Blender-bundled), 43 sheets in
 **2.8 s** wall clock.
 
+> This run predates the 0.6.0 intake sheet. A current build produces **44 sheets** (G-07 실측 근거
+> was added after this project was made) and a 72-page package; the 74 checks and the timings are
+> unchanged.
+
 ---
 
 ## 0. Install (once)
@@ -122,6 +126,56 @@ DOORS = [{"name": "D01 욕실", "wall": "W05 욕실/사무실", "offset": ft(9, 
 
 For a genuinely new address you replace these lists with the new plan. Everything downstream —
 43 sheets, 74 checks, the takeoff — is a projection of these numbers.
+
+---
+
+## 2b. Start from the site, not from the template (실측 인테이크)
+
+The template above is a starting point. When you actually stand in the garage, you have three
+things instead: photos, a walk-through video where you say the dimensions out loud, and the
+numbers themselves. `g2a.py intake` takes those.
+
+```bash
+mkdir -p projects/123-jane-doe-st/intake
+# put the photos and the video there, then transcribe what you said into text:
+#   notes.txt  or  transcript.txt
+python3 g2a.py intake 123-jane-doe-st
+```
+
+One line per room, any of these forms (Korean or English room names):
+
+```
+침실A 12'-10" x 9'-7"
+욕실 3.6m x 2.4m
+거실 3600 x 2400 mm
+수납 8' x 5'
+```
+
+It prints a table of what it read, the plate it computed, and every line it could not read:
+
+```
+합계 6실                                          52.488    565.0
+플레이트 9.05 x 6.50 m = 58.83 m2 (633 SF) · 종횡비 1.39 · basis=room-sum
+경고 2건:
+  - notes.txt:9  치수 쌍이 아님 (W x D 형식 필요) :: 복도 11'-2" x ?
+  - notes.txt:10  단위 불명 (예: 12 x 9 - ft/m 표기 필요) :: 차고 12 x 9
+```
+
+It writes `intake/measurements.json` (the numbers with their source line), `intake/evidence.json`
+(sha256 + byte size for every photo, video and text file; pixel size for images) and
+`intake/design_rooms.py` (a `ROOMS` draft you paste into `design.py`).
+
+Two things this stage will not do, on purpose:
+
+- **It does not transcribe the video.** Speech-to-text happens outside the app; the video is
+  evidence, hashed so you can prove which footage the numbers came from.
+- **It does not guess.** `차고 12 x 9` has no unit, so it is reported, not interpreted. Write
+  `12' x 9'` or `3600 x 2400 mm`.
+
+Whatever it parsed appears on sheet `G-07 실측 근거` at the next `build`, one row per measurement
+and one row per evidence file, each with the file name, the line number and the first 8 characters
+of the sha256. A project with no `intake/` still builds: G-07 then prints
+`실측 자료 없음 (설계 기준값 사용)`.
 
 ---
 

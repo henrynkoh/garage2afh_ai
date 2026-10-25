@@ -1,7 +1,7 @@
 # garage2AFH — AI remodeling package generator
 
 Turn one property (address + a few photos/sketches) into a complete garage-to-AFH
-conversion package: 43-sheet drawing set, 74 automated checks, material takeoff,
+conversion package: 44-sheet drawing set, 74 automated checks, material takeoff,
 code/coordination log, appendices, and a single bound PDF ready for the city portal.
 
 This is a reverse-engineered, Six-Sigma-structured rebuild of the ad-hoc pipeline that
@@ -34,10 +34,10 @@ One-off AI work does not repeat. This app captures the repeatable part:
 
 | # | Stage | Output | Gate (must pass) |
 |---|---|---|---|
-| 1 | Intake | `projects/<id>/design.py`, `input/` | address, parcel, lot, existing area captured |
+| 1 | Intake (실측) | `intake/measurements.json`, `intake/evidence.json`, `intake/design_rooms.py` | photos + measurement video + transcribed dimensions (notes.txt/transcript.txt) parsed into room dims, every file hashed; ≥1 measurement line, every unread line named |
 | 2 | Property record | `G-03`, `C-01` | county + survey values reconciled or logged |
 | 3 | Design model | `WALLS/ROOMS/DOORS/WINDOWS/PIPES` | all rooms closed, no duplicate walls |
-| 4 | Drawing set | 43 DXF→SVG sheets | sheet count = register |
+| 4 | Drawing set | 44 DXF→SVG sheets | sheet count = register |
 | 5 | MEP + life safety | `M/E/P/LS` sheets | every room served, egress per bedroom |
 | 6 | Automated audit | `checks_<id>.json` | 74/74 (or explained fails) |
 | 7 | Takeoff + budget | `자재목록.csv`, budget sheet | priced total ≤ declared ceiling |
@@ -54,7 +54,11 @@ cd garage2afh_ai
 # 2. create a project from the template
 python3 g2a.py new "123 Jane Doe St, Tumwater WA 98512" --parcel 40380000700 --lot-sf 9411
 
-# 3. edit the design
+# 3. (optional) start from the site: photos + measurement video + transcribed dims
+#    mkdir -p projects/123-jane-doe-st/intake && cp <photos|*.mp4|transcript.txt> there
+python3 g2a.py intake 123-jane-doe-st   # -> measurements.json, evidence.json, design_rooms.py
+
+# 4. edit the design
 $EDITOR projects/123-jane-doe-st/design.py     # walls, rooms, openings, pipes
 
 # 4. build everything
@@ -75,7 +79,7 @@ python3 g2a.py check  123-jane-doe-st          # validator, exit 1 on hard fail
 ## Repository layout
 
 ```
-g2a.py                  CLI (new / build / bind / check / status)
+g2a.py                  CLI (new / intake / build / bind / check / status)
 src/pipeline/           sheet generators, audit, validator, binder
 templates/design.py     annotated design template
 docs/rea-six-sigma.md   reverse-engineering + DMAIC analysis
@@ -100,6 +104,6 @@ remains responsible for code compliance in the authority having jurisdiction.
 ## Changelog
 
 Pipeline changes are recorded in [CHANGELOG.md](CHANGELOG.md) — newest first, with the
-measured before/after numbers for every rebuild. Latest entry: META-driven jurisdiction and
-provenance, the carport-enclosure branch (S-04 / A-19), the footer disclaimer wrapped inside
-the frame, and the META-gated water-heater note.
+measured before/after numbers for every rebuild. Latest entry: the intake stage
+(`g2a.py intake`, photos + measurement video + transcribed dimensions), evidence sheet G-07,
+and the 43 → 44 sheet count it brings.
