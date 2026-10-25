@@ -12,6 +12,12 @@ property inputs  ->  design model  ->  drawings + IFC + checks  ->  package + ap
    (5 min)            (design.py)        (automated)                (bound, indexed)      (address-named)
 ```
 
+## 라이브 주소
+
+- 랜딩: https://henrynkoh.github.io/garage2afh_ai/
+- 문서 전체 보기: https://henrynkoh.github.io/garage2afh_ai/package.html
+- 저장소: https://github.com/henrynkoh/garage2afh_ai
+
 ## Why it exists
 
 One-off AI work does not repeat. This app captures the repeatable part:
