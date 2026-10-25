@@ -22,6 +22,7 @@ if DESIGN_DIR not in sys.path:
 
 import sheets_v2 as base
 from sheets_v2 import HOUSE, T, ftin, new_doc, rect_area, sheet_frame
+from sheets_v2 import water_heater_note, wrap_notes
 import design
 
 FT = 0.3048
@@ -52,9 +53,9 @@ def g03_property(path):
         ("주소", META["project"] + ", " + META["city"], "카운티"),
         ("Parcel / Tax-ID", f"{META['parcel']} / {META['tax_id']}", "카운티 세무기록"),
         ("대지면적", f"{META['lot_sf']:,} SF ({META['lot_acres']} ac)", "카운티 기록"),
-        ("대지면적(측량)", f"{META['lot_sf_survey']:,} SF", "측량도"),
-        ("피복률", f"{META['coverage_pct']} %", "측량도"),
-        ("Zoning", META["zoning"], "측량도"),
+        (META.get("lot_second_label", "대지면적(측량)"), f"{META.get('lot_sf_survey', 0):,} SF", "측량도/카운티"),
+        ("피복률", f"{META['coverage_pct']} %", META.get("coverage_source", "측량도")),
+        ("Zoning", META["zoning"], META.get("zoning_source", "측량도")),
         ("준공연도", str(META["year_built"]), "카운티 기록"),
         ("연면적", f"{META['existing_structure_sf']:,} living / {META['gross_sf']:,} gross", "카운티 기록"),
         ("1층 면적", f"{META['ground_floor_sf']:,} SF", "카운티 기록"),
@@ -63,33 +64,37 @@ def g03_property(path):
         ("지붕/외벽", f"{META['roof']} / {META['exterior']}", "카운티 기록"),
         ("난방", META["heating"], "카운티 기록"),
         ("온수기", META["water_heater"], "MLS"),
-        ("차고", "Attached built-in, 790 SF (전환 대상)", "카운티 + A01.3"),
-        ("측량도", "L2-25T2-3R (2015, J.K. Hoyles)", "측량도"),
+        ("주차/차고", META.get("parking", "Attached built-in, 790 SF (전환 대상)"), "Zillow + 카운티 assessor"),
+        ("상하수도", META.get("utilities", "PSE 전기 / City of Tumwater 상·하수도"), "카운티 assessor"),
+        ("HOA", META.get("hoa", "$900/yr (Chapparel Landing)"), "MLS/Zillow"),
+        ("과세가/연세액", f"${META.get('assessed_value', 0):,} / ${META.get('annual_tax', 0):,}", "카운티 세무기록"),
+        ("측량도", META.get("survey", "L2-25T2-3R (2015, J.K. Hoyles)"), META.get("survey_source", "측량도/카운티")),
     ]
-    table(msp, rows, x=0.8, y=12.9, cols=[0.0, 5.4, 12.4], step=0.44, h=0.15)
-    note(msp, [
+    table(msp, rows, x=0.8, y=12.9, cols=[0.0, 5.4, 12.4], step=0.38, h=0.14)
+    note(msp, META.get("g03_notes") or [
         "주의: Zillow/MLS 값은 참고용이며, 허가 신청에는 카운티 assessor 기록과 실측이 우선합니다.",
         "기존 온수기가 가스식이고 차고 내부에 설치되어 있어, 차고를 거주공간으로 전환할 경우",
         "이전 설치 또는 연소공기·격리 조치가 필요합니다 (IRC M1307 / G2408 검토).",
-    ], y=6.2, step=0.5)
+    ], y=4.6, step=0.5)
     doc.saveas(path); return path
 
 
 def g04_application(path):
     doc = new_doc(); msp = doc.modelspace()
-    sheet_frame(msp, "G-04", "허가 신청 데이터 (City of Tumwater)")
+    sheet_frame(msp, "G-04", f"허가 신청 데이터 ({META.get('jurisdiction', 'City of Tumwater')})")
     fields = [
         ("Permit type", "Residential Alteration / Change of Use (AFH)"),
         ("Project address", f"{META['project']}, {META['city']}"),
-        ("Legal", "SEC 28 T18 R2W NE SE & SE SE PLAT CHAPPAREL LANDING DIV 2 LT 7 DOC 4490930"),
+        ("Legal", META.get("legal", "SEC 28 T18 R2W NE SE & SE SE PLAT CHAPPAREL LANDING DIV 2 LT 7 DOC 4490930")),
         ("Parcel / Tax-ID", f"{META['parcel']} / {META['tax_id']}"),
         ("Zoning", META["zoning"]),
-        ("Lot / coverage", f"{META['lot_sf']:,} SF · {META['coverage_pct']}% (측량)"),
+        ("Lot / coverage", f"{META['lot_sf']:,} SF · {META['coverage_pct']}% ({META.get('coverage_basis', '측량')})"),
         ("Existing ground floor", f"{META['ground_floor_sf']:,} SF of {META['existing_structure_sf']:,} SF living"),
         ("Scope", META["scope"]),
-        ("Existing use", "3-car garage (non-habitable)"),
-        ("Proposed use", "AFH 거주공간 - 침실 3 + 통합욕실 1"),
-        ("Area changed", f"{META['existing_garage_sf']} SF (garage) → {META['internal_sf']} SF (habitable)"),
+        ("Existing use", META.get("existing_use", "3-car garage (non-habitable)")),
+        ("Proposed use", META.get("proposed_use", "AFH 거주공간 - 침실 3 + 통합욕실 1")),
+        ("Area changed", META.get("area_changed")
+         or f"{META['existing_garage_sf']} SF (garage) → {META['internal_sf']} SF (habitable)"),
         ("Construction value", "$ (건축주 기재)"),
         ("Applicant / Owner", "(성명·연락처 기재)"),
         ("Contractor", "(LIC# 기재)"),
@@ -119,7 +124,9 @@ def g05_checklist(path):
         ("기존/제안 평면", "A-01, A-02, A-05", "포함"),
         ("면적 산출", "A-12", "포함"),
         ("입면/단면", "A-04, A-13, A-14", "개념 수준"),
-        ("구조 계획", "S-01, S-02, S-03", "EOR 검토 필요"),
+        ("구조 계획", "S-01, S-02, S-03" + (", S-04" if META.get("carport_enclosure") else ""),
+         "EOR 검토 필요"),
+        *([("주택 재구성 계획", "A-19", "개념 · 실측 필요")] if META.get("carport_enclosure") else []),
         ("기계/전기/배관", "M-01~03, E-01~03, P-02~04", "설계자 확정 필요"),
         ("소방(연기/CO)", "LS-01", "포함"),
         ("이그레스", "LS-02", "포함"),
@@ -169,22 +176,28 @@ def en03_wsec(path):
 def g06_coordination(path):
     doc = new_doc(); msp = doc.modelspace()
     sheet_frame(msp, "G-06", "조정(Discrepancy) 로그")
-    rows = [
-        ("#", "항목", "출처 간 차이", "처리"),
-        ("1", "Lot 번호", "카운티 LT 7 / 측량표지 LOT 1", "카운티·시 확인"),
-        ("2", "대지면적", "카운티 9,411 / 측량 9,357", "피복률은 측량 기준"),
-        ("3", "Zoning", "측량표기 R4R (현행 조례 확인)", "시 조닝 확인"),
-        ("4", "기초", "MLS Block / 카운티 Concrete", "현장 확인"),
-        ("5", "1층 면적", "카운티 1,160 / A01.4 736 SF", "A01.4 기준 설계"),
-        ("6", "가스 온수기", "차고 내부 설치 (MLS)", "이전/격리 계획"),
-        ("7", "AFH 라이선스", "건축 허가와 별개 (DSHS)", "별도 진행"),
-        ("8", "차고도어", "유지 + 내부 스킨월 (A01.4)", "구조 영향 없음"),
+    disc = META.get("discrepancies") or [
+        ("Lot 번호", "카운티 LT 7 / 측량표지 LOT 1", "카운티·시 확인"),
+        ("대지면적", "카운티 9,411 / 측량 9,357", "피복률은 측량 기준"),
+        ("Zoning", "측량표기 R4R (현행 조례 확인)", "시 조닝 확인"),
+        ("기초", "MLS Block / 카운티 Concrete", "현장 확인"),
+        ("1층 면적", "카운티 1,160 / A01.4 736 SF", "A01.4 기준 설계"),
+        ("가스 온수기", "차고 내부 설치 (MLS)", "이전/격리 계획"),
+        ("AFH 라이선스", "건축 허가와 별개 (DSHS)", "별도 진행"),
+        ("차고도어", "유지 + 내부 스킨월 (A01.4)", "구조 영향 없음"),
     ]
+    rows = [("#", "항목", "출처 간 차이", "처리")] + \
+        [(str(i), a, b, c) for i, (a, b, c) in enumerate(disc, start=1)]
     table(msp, rows, x=0.8, y=12.9, cols=[0.0, 0.7, 2.6, 7.6], step=0.5, h=0.12)
-    note(msp, [
+    notes = [
         "이 표는 제출 전 해소해야 할 상충 항목 기록입니다.",
-        "1·3번 확인 전까지 도면의 legal/zoning 표기는 카운티 기록을 따릅니다.",
-    ], y=7.6, step=0.45)
+        "확인 전까지 도면의 legal/zoning 표기는 카운티 기록을 따릅니다.",
+    ]
+    # META['water_heater'] 가 차고 내 설치를 말할 때만 로그에 한 줄 추가 (META-driven)
+    _wh = water_heater_note()
+    if _wh:
+        notes.insert(1, _wh)
+    note(msp, wrap_notes(notes, 80, "   "), y=7.6, step=0.45)
     doc.saveas(path); return path
 
 
