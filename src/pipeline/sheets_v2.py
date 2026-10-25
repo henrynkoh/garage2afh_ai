@@ -8,6 +8,7 @@
 
 import math
 import os
+import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -31,6 +32,10 @@ FT = 0.3048
 
 FW, FH = 21.0, 14.85            # 시트 틀 (A3 @ 1:50)
 TB = (10.4, 0.0, 9.4, 4.4)      # 표제란 x, y, w, h
+TXT_K = 1.35                    # SVG 렌더 폰트 크기 = 1.35 x TEXT height
+FRAME_XMAX = 20.90              # 오른쪽 한계 (틀 21.0 에서 10 cm 안쪽)
+WH_KO = ("가스 온수기가 차고 내부에 설치 — 거주공간 전환 시 이전 또는 "
+         "연소공기·격리 조치 필요 (IRC M1307 / G2408)")
 
 LAYERS = {
     "WALL-EXT": (7, 70),
@@ -79,6 +84,65 @@ def p_on_wall(w, off):
     return x1 + (x2 - x1) / L * off, y1 + (y2 - y1) / L * off
 
 
+def text_w(s, h, k=TXT_K):
+    """렌더 폭 추정 (m). SVG 는 font-size = 1.35*h 로 그리므로 글자당 1.35*h 로 본다."""
+    return len(str(s)) * h * k
+
+
+def fit_h(s, h, x, xmax=FRAME_XMAX, k=TXT_K, min_h=0.09):
+    """(x, h) 에서 틀을 넘지 않는 최대 높이. 넘치지 않으면 h 그대로."""
+    avail = max(0.5, xmax - x)
+    return round(max(min_h, min(h, avail / (max(len(str(s)), 1) * k))), 3)
+
+
+def wrap(s, n):
+    """공백 기준 줄바꿈. 각 줄 <= n 자, 공백이 드문 한글은 강제 분할."""
+    out, cur = [], ""
+    for word in str(s).split(" "):
+        cand = (cur + " " + word) if cur else word
+        if len(cand) <= n:
+            cur = cand
+            continue
+        if cur:
+            out.append(cur)
+        while len(word) > n:
+            out.append(word[:n])
+            word = word[n:]
+        cur = word
+    if cur:
+        out.append(cur)
+    return out or [""]
+
+
+def wrap_notes(lines, n, indent="   "):
+    """주기 목록을 n 자로 접는다. 이어지는 줄은 들여쓰기."""
+    out = []
+    for line in lines:
+        parts = wrap(line, n)
+        out.append(parts[0])
+        for cont in parts[1:]:
+            out.append(indent + cont)
+    return out
+
+
+def source_short(n=27):
+    """디스클레이머용 짧은 출처 표기 (괄호 설명 제거 후 n 자로 자름)."""
+    s = META.get("source_drawings", "A01.3/A01.4")
+    s = " ".join(re.sub(r"\s*\([^)]*\)", "", str(s)).split())
+    return s if len(s) <= n else s[:n - 1].rstrip() + "…"
+
+
+def water_heater_in_garage():
+    """META['water_heater'] 가 차고 내 설치를 말하면 True (차고/garage 키워드)."""
+    wh = str(META.get("water_heater") or "")
+    return bool(wh.strip()) and ("차고" in wh or "garage" in wh.lower())
+
+
+def water_heater_note():
+    """차고 내 온수기 주기 문구. 해당 없으면 None."""
+    return WH_KO if water_heater_in_garage() else None
+
+
 def ftin(m):
     total_in = m / FT * 12.0
     feet = int(total_in // 12)
@@ -100,6 +164,8 @@ def new_doc():
 
 
 def T(msp, s, x, y, h=0.22, layer="TEXT", align=TextEntityAlignment.LEFT):
+    """텍스트 한 줄. 틀 오른쪽을 넘으면 높이를 줄여 안쪽에 넣는다 (측정 기반)."""
+    h = fit_h(s, h, x)
     msp.add_text(s, height=h, dxfattribs={"layer": layer}).set_placement((x, y), align=align)
 
 
@@ -109,20 +175,30 @@ def sheet_frame(msp, code, title):
     x, y, w, h = TB
     msp.add_lwpolyline([(x, y), (x + w, y), (x + w, y + h), (x, y + h)], close=True,
                        dxfattribs={"layer": "TITLE"})
+    # 1행: 시/주소가 project 안에 이미 들어 있으면 중복 표기하지 않는다 (폭 절약)
+    _pj, _city = META.get("project", ""), META.get("city", "")
+    head = _pj if (_city and _city in _pj) else f"{_pj}  |  {_city}"
     rows = [
-        (f"{META.get('project','')}  |  {META.get('city','')}", 0.30),
+        (head, 0.30),
         (f"{META.get('lot','')}", 0.20),
-        ("AFH 전환 (기존 3-car garage) - 허가 제출용 스키매틱", 0.24),
+        (f"AFH 전환 ({META.get('existing_use_short', '기존 3-car garage')}) - 허가 제출용 스키매틱", 0.24),
         (f"원안: {META.get('architect','')}", 0.17),
         (f"Project No. {META.get('project_no','')}    Date {META.get('date','')}", 0.17),
         (f"SHEET {code}    {title}", 0.28),
     ]
     yy = y + h - 0.45
     for s, hh in rows:
-        T(msp, s, x + 0.15, yy, hh, "TITLE")
+        # 폭에 맞춰 높이를 줄인다 (T() 안에서도 한 번 더 확인)
+        T(msp, s, x + 0.15, yy, min(hh, fit_h(s, hh, x + 0.15)), "TITLE")
         yy -= hh + 0.22
-    T(msp, "이 도면은 A01.3/A01.4를 옮긴 스키매틱입니다. 시공 전 실측 확인이 필요합니다 (owner-builder 제출, 서명 불요).",
-      x + 0.15, y - 0.35, 0.15, "NOTE")
+    # 디스클레이머: 2줄로 접어 표제란 안쪽에 넣는다 (2줄 x 45자, 높이 0.14)
+    d_h = 0.14
+    d1 = f"이 도면은 {source_short()} 기반 스키매틱입니다."
+    d2 = "시공 전 실측 확인 필요. owner-builder 제출, 서명 불요."
+    if max(text_w(d1, d_h), text_w(d2, d_h) + 0.15) > FRAME_XMAX - x:
+        d_h = 0.12          # 그래도 넘치면 한 단계 더 줄인다
+    T(msp, d1, x, y - 0.42, d_h, "NOTE")
+    T(msp, d2, x + 0.15, y - 0.66, d_h, "NOTE")
 
 
 def dim_h(msp, x1, x2, y):
@@ -157,8 +233,8 @@ def draw_plan_body(msp, existing=False, labels=True):
     if existing:
         for i, y in enumerate((2.0, 6.0, 10.0), start=1):
             T(msp, f"PARKING {i}", 1.0, y, 0.3, "TEXT")
-        T(msp, "EXISTING 3-CAR GARAGE 790 SF", 1.0, 12.2, 0.36, "TEXT")
-        T(msp, "기존 차고도어 유지 (남측)", 1.0, 0.9, 0.22, "NOTE")
+        T(msp, META.get("existing_garage_label", "EXISTING 3-CAR GARAGE 790 SF"), 1.0, 12.2, 0.28, "TEXT")
+        T(msp, META.get("existing_garage_label_line", "기존 차고도어 유지 (남측)"), 1.0, 0.9, 0.22, "NOTE")
         return
     for r in design.ROOMS:
         x1, y1, x2, y2 = r["rect"]
@@ -267,7 +343,7 @@ def elevation_sheet(path):
             msp.add_lwpolyline([(ox + width * 0.55, base), (ox + width * 0.55, base + 2.1),
                                 (ox + width * 0.92, base + 2.1), (ox + width * 0.92, base)],
                                close=True, dxfattribs={"layer": "DOOR"})
-            T(msp, "기존 차고도어", ox + width * 0.55, base + 2.3, 0.2, "NOTE")
+            T(msp, META.get("opening_label", "기존 차고도어"), ox + width * 0.55, base + 2.3, 0.2, "NOTE")
         T(msp, f"CEILING {ftin(h)}", ox, base - 0.4, 0.18, "DIM")
         ox += width + 1.0
     base2 = 1.2
@@ -307,7 +383,7 @@ def mech_sheet(path):
         T(msp, f"{p['slope_pct']:.1f} %", tx + 4.4, ty, 0.17)
         ty -= 0.36
     notes = [
-        "EF-1 / EH-1: 욕실 배기팬 + 외벽 후드(역류방지). 관경/높이는 A01.4 확인 필요.",
+        "EF-1 / EH-1: 욕실 배기팬 + 외벽 후드(역류방지). 관경/높이는 설계자 확인 필요.",
         "CU-1: 실외 콘덴서 콘크리트 패드. 위치는 사이트/HOA 확인 후 확정.",
         "DH-1: 드라이어 배관은 잠정(TBC). 별도 덕트, 백드래프트 댐퍼, 스크린 없음.",
         "연기/CO 감지기: 상호연동 + 배터리 백업 (WAC R314.4 / IRC 314.4, R315.5).",
@@ -327,16 +403,16 @@ def cover_sheet(path):
     T(msp, META.get("project", "프로젝트"), 0.6, 13.4, 0.55, "TITLE")
     T(msp, META.get("scope", ""), 0.6, 12.8, 0.22)
     notes = [
-        "1. 이 세트는 Canarch Designs A01.3(기존)/A01.4(제안)를 옮긴 스키매틱 BIM/도면입니다.",
-        "2. 실 치수는 A01.4 표기값을 사용했고, 벽 위치는 그 치수에 맞춘 배치입니다.",
+        f"1. 이 세트는 {META.get('source_drawings', 'Canarch Designs A01.3(기존)/A01.4(제안)')} 기반 스키매틱 BIM/도면입니다.",
+        f"2. 실 치수는 {META.get('dim_source', 'A01.4 표기값')}을 사용했고, 벽 위치는 그 치수에 맞춘 배치입니다.",
         "3. 제출 전 추가 필요: 대지/주차 계획, 구조 검토, WSEC 계산, M/E/P 실시도,",
         "   연기·CO 경보 배치도, AFH(DSHS WAC 388-76) 검토, Owner-builder 선언서.",
-        "4. 천장고 10'-5\". 기존 차고도어 유지 + 내부 스킨월 마감(A01.4 주기).",
+        "4. " + META.get("ceiling_note", "천장고 10'-5\".") + " " + META.get("opening_note", "기존 차고도어 유지 + 내부 스킨월 마감(A01.4 주기)") + ".",
         "5. 창호: 신규 5x4 슬라이더 3개(창턱 40\"), 침실별 이그레스 확보 목적.",
         "6. 자동검사 결과는 report.html 참조. 검사 통과는 법규·구조 안전을 보증하지 않습니다.",
     ]
     y = 11.6
-    for n in notes:
+    for n in wrap_notes(notes, 74, "   "):
         T(msp, n, 0.6, y, 0.19, "NOTE")
         y -= 0.55
     doc.saveas(path)
