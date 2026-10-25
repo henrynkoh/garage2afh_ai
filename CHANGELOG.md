@@ -3,6 +3,85 @@
 All notable pipeline changes. Dates are the day the change was rebuilt and verified on
 real projects (3571 Cassie Dr SW, 7504 32nd Ave SE, 1713 Winterwood Dr).
 
+## 0.5.0 — 2026-10-24 — LS-01 egress sentence derives from ROOMS; all six projects regenerated
+
+### The defect
+
+`sheets_permit2.sheet_life_safety` printed the 3571 reference program as a literal:
+
+```
+"이그레스 창: 침실A/B/C (순개구부 5.7 sqft 이상 확인)"
+```
+
+On a 2-bedroom program the LS-01 (연기·CO) sheet named `침실A/B/C` — three egress windows on a
+plan that draws `WD01 침실A` and `WD02 침실B`. This is the residual recorded as *Known residual*
+under 0.4.0. Like the 0.4.0 defects it survives every gate: `audit_3571.py` checks the model and
+`text_bbox.py` only measures against the frame, so only the rendered PDF shows it.
+
+### The fix — one derivation, shared by every sheet that names bedrooms
+
+`sheets_v2.py` now owns the program-read helper set:
+
+```
+def bedroom_names():
+    """ROOMS 에서 kind=='bedroom' 인 실 이름 목록"""
+    return [r["name"] for r in design.ROOMS if r.get("kind") == "bedroom" and r.get("name")]
+
+def bed_count():
+    return len(bedroom_names())
+
+def bed_label():
+    """2침실이면 '침실A/B', 3침실이면 '침실A/B/C'"""
+
+def egress_window_count():
+    """WINDOWS 이름에 '이그레스' 가 들어간 창 수"""
+```
+
+LS-01 now prints `이그레스 창: {bed_label()} {bed_count()}개소 (순개구부 5.7 sqft 이상 확인)`,
+so the sentence carries both the names and the count of the project's own bedrooms.
+
+### Same class, fixed in the same pass (grep of `src/pipeline/` for literal bedroom names)
+
+| file | line | before | after |
+|---|---|---|---|
+| `sheets_permit2.py` | 94 | `이그레스 창: 침실A/B/C (…삭제 확인)` literal | `f"이그레스 창: {base.bed_label()} {base.bed_count()}개소 …"` |
+| `sheets_3571_full.py` | 36-38 | `_beds()` local counter | delegates to `base.bed_count()` |
+| `sheets_3571_full.py` | 298 | A-11 마감 일람표 row `침실 A/B/C` | `base.bed_label()` |
+| `sheets_carport.py` | 36-42 | none | `main_floor_beds()` / `main_floor_bed_count()` read `MAIN_FLOOR['rooms']` |
+| `sheets_carport.py` | 218 | A-19 title `계획 (3 침실 + 욕실)` | `계획 ({main_floor_bed_count()} 침실 + 욕실)` |
+| `sheets_carport.py` | 258 | `E1/E2/E3 = 침실 이그레스 창` | codes joined from `MAIN_FLOOR['egress']` |
+| `sheets_carport.py` | 266 | `6. 이그레스: 침실 3개소 …` | `침실 {main_floor_bed_count()}개소` |
+| `sheets_carport.py` | 295-297 | `침실 3개소 합계 … (207 + 148 + 148 SF …)` | count and per-room SF list computed from the bedroom rows |
+| `audit_3571.py` | 106-114 | none | `bed_label()` from `ROOMS` |
+| `audit_3571.py` | 274 | C45 detail `침실 A/B/C` | `bed_label()` |
+| `audit_3571.py` | 276-277 | C47 detail `WD01/02/03` | ids of the actual egress windows |
+| `sheets_packet.py` | 96 | G-04 default `AFH 거주공간 - 침실 3 + 통합욕실 1` | count from `ROOMS` (`bed_count()` / bath count) |
+| `sheets_v2.py` | 447 | G-00 item 5 `신규 5x4 슬라이더 3개` | `egress_window_count()` |
+
+`grep -rn "침실C\|침실A/B/C\|침실 3개소" src/pipeline/*.py` now returns only the two docstrings
+of `bed_label()` that spell the example output; no sheet or audit string carries a bedroom name or
+bedroom count as a literal.
+
+### All six projects regenerated under 0.5.0
+
+Build → A3 HTML → Playwright print (fresh tab per file, `preferCSSPageSize`) → `trim_blank.py` →
+bind → `g2a.py check`. Nothing was reused from the previous version: every DXF, SVG, sheet PDF and
+master PDF below was produced by this run.
+
+| project | program | sheets | audit | validator | master | page size | blank/dark @18 dpi | LS-01 egress sentence |
+|---|---|---|---|---|---|---|---|---|
+| 3571-cassie | 3 bed / 736 SF | 43 | 74/74 | 7/7 | 71 p | A3 only | 0 / 0 | `침실A/B/C 3개소` |
+| 7504-32nd-ave-se | carport + 3 bed main floor | 45 | 74/74 | 7/7 | 49 p | A3 only | 0 / 0 | `침실A/B/C 3개소` |
+| 1713-winterwood-dr | 3 bed / 720 SF | 43 | 74/74 | 7/7 | 47 p | A3 only | 0 / 0 | `침실A/B/C 3개소` |
+| 133-jalyn-st | 2 bed / 528 SF | 43 | 74/74 | 7/7 | 47 p | A3 only | 0 / 0 | `침실A/B 2개소` |
+| 3515-hawthorne-pl | 2 bed / 440 SF | 43 | 74/74 | 7/7 | 47 p | A3 only | 0 / 0 | `침실A/B 2개소` |
+| 7021-southwick-ct | 2 bed / 505 SF | 43 | 74/74 | 7/7 | 47 p | A3 only | 0 / 0 | `침실A/B 2개소` |
+
+Every master page is 1191.12 × 841.92 pt (one distinct size per file), no FAIL line in any audit
+run, validator hard fails 0, and the trailing Chromium blank page was dropped from all 21 rendered
+PDFs (44→43, 46→45, 2→1, 3→2). The 3571 master keeps its Letter→A3 normalisation for appendix
+B/C/D and lands at 71 pages; its index stays 2 pages by design.
+
 ## 0.4.0 — 2026-10-24 — sheet text derives from the program (G-01 spacing, egress count, S-01 label)
 
 Three defects found while building 7021 Southwick Ct SW. All three are the same class: a sheet
