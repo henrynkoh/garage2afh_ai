@@ -1,5 +1,65 @@
 # Changelog
 
+## 0.7.0 — 2026-10-25 — all-projects gallery (`projects.html`) + `g2a.py publish-index`
+
+### What changed
+
+Every package so far lived in its own folder and was reachable only if you already knew the
+URL. There is now one gallery page over all of them, and one command that keeps it true.
+
+| Piece | Detail |
+|---|---|
+| `projects.html` (new) | fetches `projects.json` at runtime, one card per project; no build step, no bundler |
+| `projects.json` (new) | 6 objects, newest build first: slug, address, city, jurisdiction, zoning, parcel, year_built, garage_type, garage_sf, program, sheets, pages, audit, branch_note, pdf, built |
+| `package.html` | accepts `?doc=<relative pdf path>` (+ `&title=`, `&pages=`), so the gallery reuses the existing viewer; the 71-page default still works when the parameter is absent |
+| `docs/projects/<slug>/` | the master PDF of each project, 2.7–4.4 MB each |
+| `g2a.py publish-index` (new) | scans `projects/*/` plus `--extra <path>`, reads META + `out/validation.json` + `out/submit/*.pdf`, rewrites `projects.json`, the README button count, and `docs/projects/UPLOAD-PLAN.md` |
+| README | `▶ **[전체 프로젝트 보기 (N개) — 완성된 패키지 모음](…/projects.html)**` inside the `## 라이브 주소` block |
+
+`?doc=` is checked before use: a value with a scheme, a leading `/`, or `..` is ignored, so the
+parameter cannot turn the viewer into a link to somebody else's document. When the document is
+not the default 71-page package, the left-hand page outline is hidden instead of listing pages
+that do not exist in the file being viewed.
+
+### Measured on the six projects (source: each `out/validation.json` + the master PDF itself)
+
+| slug | program | sheets | master pages | audit | built |
+|---|---|---|---|---|---|
+| 3515-hawthorne-pl | 2침실 | 44 | 48 | 74/74 | 2026-10-25 |
+| 7021-southwick-ct | 2침실 | 43 | 47 | 74/74 | 2026-10-24 |
+| 133-jalyn-st | 2침실 | 43 | 47 | 74/74 | 2026-10-24 |
+| 1713-winterwood-dr | 3침실 | 43 | 47 | 74/74 | 2026-10-24 |
+| 7504-32nd-ave-se | 카포트 외벽화 | 45 | 49 | 74/74 | 2026-10-24 |
+| 3571-cassie | 3침실 | 43 | 71 | 74/74 | 2026-10-24 |
+| **total** | | **261** | **309** | | |
+
+`validation.json`'s `pdf_pages` is the *Plans* PDF (44/43/43/43/45/43), not the master; the master
+carries the appendix, so `publish-index` counts the pages of the master PDF itself and only warns
+when the master has *fewer* pages than the drawing set (a binding defect), not more.
+
+### How a new project lands on the gallery
+
+New projects appear on the gallery automatically after `publish-index` + PDF upload — no HTML
+edit, no build step, no separate index file to keep in sync.
+
+```
+python3 g2a.py publish-index --extra ../HouseBIM/projects/3571-cassie   # rewrite json + README count + plan
+# upload docs/projects/<slug>/<master>.pdf  (Add file -> Upload files, one folder per project)
+```
+
+`publish-index` prints one row per project (program, sheets, pages, audit, built, pdf) and a
+`missing / warnings` block that names what is absent: no `design.py`, no `validation.json`, no
+master PDF, no audit result, or a field the schema needs that META does not carry. A project with
+no build output is skipped rather than half-listed.
+
+### Known residual
+
+`docs/projects/UPLOAD-PLAN.md` is a plan, not a guarantee: `publish-index` runs offline, so it
+cannot see whether the PDF really reached GitHub. Until the upload happens the card renders
+“PDF 미업로드” instead of a dead link — the gallery probes each PDF with a `HEAD` request and
+falls back to “cannot tell” (keeping the link) only when `file://` or a blocked request makes the
+answer unknowable.
+
 ## 0.6.0 — 2026-10-25 — intake stage (`g2a.py intake`), evidence sheet G-07, 44 sheets
 
 ### What changed

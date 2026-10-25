@@ -61,11 +61,12 @@
 <body>
 
 <header>
-  <h1 class="title">3571 Cassie Dr SW &mdash; complete package, 71 pages <span>&middot; 43 sheets + appendix A&ndash;D</span></h1>
+  <h1 class="title" id="doc-title">3571 Cassie Dr SW &mdash; complete package, 71 pages <span>&middot; 43 sheets + appendix A&ndash;D</span></h1>
   <div class="actions">
     <a class="home" href="index.html">&larr; garage2AFH</a>
-    <a class="link" href="docs/package/3571-Cassie-master-package.pdf" target="_blank" rel="noopener">Open in new tab</a>
-    <a class="btn" href="docs/package/3571-Cassie-master-package.pdf" download>Download PDF</a>
+    <a class="home" href="projects.html">All projects</a>
+    <a class="link" id="doc-tab" href="docs/package/3571-Cassie-master-package.pdf" target="_blank" rel="noopener">Open in new tab</a>
+    <a class="btn" id="doc-dl" href="docs/package/3571-Cassie-master-package.pdf" download>Download PDF</a>
   </div>
 </header>
 
@@ -161,17 +162,56 @@
 <div class="doc">
   <iframe id="viewer" title="3571 Cassie Dr SW — master package PDF, 71 pages"
           src="docs/package/3571-Cassie-master-package.pdf#view=FitH"></iframe>
-  <p class="fallback">If the browser cannot show PDFs inline, use <a href="docs/package/3571-Cassie-master-package.pdf" download>Download PDF</a> or <a href="docs/package/3571-Cassie-master-package.pdf" target="_blank" rel="noopener">open it in a new tab</a>.</p>
+  <p class="fallback">If the browser cannot show PDFs inline, use <a id="fb-dl" href="docs/package/3571-Cassie-master-package.pdf" download>Download PDF</a> or <a id="fb-tab" href="docs/package/3571-Cassie-master-package.pdf" target="_blank" rel="noopener">open it in a new tab</a>.</p>
 </div>
 
 </div>
 
 <script>
 (function(){
-  var PDF = "docs/package/3571-Cassie-master-package.pdf";
+  var DEFAULT_PDF = "docs/package/3571-Cassie-master-package.pdf";
+  var PDF = DEFAULT_PDF;
   var frame = document.getElementById("viewer");
   var links = Array.prototype.slice.call(document.querySelectorAll(".toc a[data-page]"));
   var toc = document.getElementById("toc");
+
+  /* ?doc=<relative pdf path> lets the gallery reuse this viewer for any package.
+     Only a path inside this site is accepted: no scheme, no leading slash, no "..". */
+  function docParam(){
+    var m = /[?&]doc=([^&]*)/.exec(location.search);
+    if (!m) { return null; }
+    var v = decodeURIComponent(m[1]).replace(/\\/g, "/");
+    if (!v || /^[a-z][a-z0-9+.-]*:/i.test(v) || v.charAt(0) === "/" || v.indexOf("..") !== -1) { return null; }
+    return v;
+  }
+  function oneParam(name){
+    var m = new RegExp("[?&]" + name + "=([^&]*)").exec(location.search);
+    return m ? decodeURIComponent(m[1]) : null;
+  }
+  function safeUrl(p){ return p.split("/").map(encodeURIComponent).join("/"); }
+
+  function applyDoc(path, title, pages){
+    var url = safeUrl(path);
+    PDF = url;
+    ["doc-tab", "fb-tab"].forEach(function(id){
+      var a = document.getElementById(id); if (a) { a.setAttribute("href", url); }
+    });
+    ["doc-dl", "fb-dl"].forEach(function(id){
+      var a = document.getElementById(id); if (a) { a.setAttribute("href", url); }
+    });
+    var h = document.getElementById("doc-title");
+    var label = title || path.split("/").pop();
+    if (h) { h.textContent = label + (pages ? " \u2014 " + pages + " pages" : ""); }
+    document.title = label + (pages ? " \u2014 " + pages + " pages" : "");
+    frame.setAttribute("src", url + "#view=FitH");
+    frame.setAttribute("title", label);
+    /* the page-by-page outline below is the 3571 package's own; another doc gets a
+       clean full-height view instead of a table of contents that lies. */
+    if (toc && path !== DEFAULT_PDF) { toc.hidden = true; toc.open = false; }
+  }
+
+  var altDoc = docParam();
+  if (altDoc) { applyDoc(altDoc, oneParam("title"), oneParam("pages")); }
 
   /* on narrow screens start collapsed */
   if (window.matchMedia("(max-width:900px)").matches) { toc.open = false; }

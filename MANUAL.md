@@ -251,12 +251,65 @@ One row per project (all projects when `slug` is omitted):
 Read it left to right: sheets exist, previews exist, audit is complete, validator is complete,
 PDF page count. `-` means the JSON has not been written yet.
 
+### `g2a.py publish-index`
+
+```bash
+python3 g2a.py publish-index [--extra PATH ...]
+```
+
+Rewrites the three things the gallery is built from. Run it after `build`/`bind`/`check` on any
+project, and again whenever a new project folder appears.
+
+| Writes | What it is |
+|---|---|
+| `projects.json` | one object per project, newest build first — the only input `projects.html` reads |
+| `README.md` | the count inside `▶ **[전체 프로젝트 보기 (N개) …]**`, nothing else |
+| `docs/projects/UPLOAD-PLAN.md` | per-project upload table: target repo path, source path, size, pages |
+
+Scanned: every `projects/<slug>/` that has a `design.py`, plus each `--extra <path>` you pass for
+a project that lives outside the repo (`../HouseBIM/projects/3571-cassie`). A folder with no
+build output is skipped with a line saying so.
+
+```
+$ python3 g2a.py publish-index --extra ../HouseBIM/projects/3571-cassie
+[publish-index] projects.json  6 projects
+  slug                     program        sheets  pages  audit    built       pdf
+  3515-hawthorne-pl        2침실            44      48     74/74    2026-10-25  3515 Hawthorne Pl SE - Master Package - Plans plus Appendix.pdf
+  7021-southwick-ct        2침실            43      47     74/74    2026-10-24  7021 Southwick Ct SW - Master Package - Plans plus Appendix.pdf
+  133-jalyn-st             2침실            43      47     74/74    2026-10-24  133 Jalyn St - Master Package - Plans plus Appendix.pdf
+  1713-winterwood-dr       3침실            43      47     74/74    2026-10-24  1713 Winterwood Dr - Master Package - Plans plus Appendix.pdf
+  7504-32nd-ave-se         카포트 외벽화        45      49     74/74    2026-10-24  7504 32nd Ave SE - Master Package - Plans plus Appendix.pdf
+  3571-cassie              3침실            43      71     74/74    2026-10-24  3571 Cassie Dr SW - Master Package - Plans plus Appendix.pdf
+  TOTAL                    6 projects     261     309
+
+[publish-index] missing: 없음 (모든 프로젝트 완비)
+[publish-index] README button  count = 6
+[publish-index] upload plan  docs/projects/UPLOAD-PLAN.md
+```
+
+Where each column comes from: `program` from the bedroom rooms in the project's own `ROOMS`
+(or `카포트 외벽화` when `META["carport_enclosure"]`), `sheets` from `out/validation.json`,
+`pages` from the master PDF itself, `audit` from `out/checks_3571.json`, `built` from the master
+PDF's modification date. `META` wins over `meta.json`, because `meta.json` is only a partial copy.
+
+Missing pieces are named, never guessed:
+
+```
+[publish-index] missing / warnings
+  123-jane-doe-st          out/submit 마스터 PDF 없음
+  123-jane-doe-st          out/validation.json 없음 (시트 수 미검증)
+```
+
+After the JSON is written, upload the PDFs listed in `docs/projects/UPLOAD-PLAN.md` (GitHub web UI,
+**Add file → Upload files**, one folder per project). The gallery card shows `PDF 미업로드` until
+the file is actually there, so a missing upload is visible, not a dead link.
+
 ---
 
 ## 3. File layout
 
 ```
-g2a.py                     CLI: new / build / bind / check / status
+g2a.py                     CLI: new / intake / build / bind / check / status / publish-index
 src/pipeline/
   sheets_v2.py             core architectural sheets, and the shared drawing library
   sheets_permit2.py        life safety, mechanical, electrical, plumbing, structural, energy
@@ -278,6 +331,10 @@ projects/<slug>/
   out/pdf/                 the A3 sheet-set PDF
   out/appendix/            appendix blocks + index
   out/submit/              address-named files, exactly what goes to the portal
+projects.json              gallery data: one object per project (written by publish-index)
+projects.html              all-projects gallery (GitHub Pages, no build step)
+docs/projects/<slug>/      the master PDF of each project, as served on the site
+docs/projects/UPLOAD-PLAN.md  which PDF still has to be uploaded (written by publish-index)
 pydeps/                    pip --target dependencies (never commit)
 ```
 
